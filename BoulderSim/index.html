@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>硬核抱石模拟器 · 核心切片 Demo</title>
+    <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body { width: 100%; height: 100%; overflow: hidden; background: #1c1c1c; -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; touch-action: none; }
+      #app { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; }
+      canvas { display: block; background: #E6D9B5; box-shadow: 0 0 40px rgba(0,0,0,.5); touch-action: none; }
+      #tuning { position: fixed; top: 8px; right: 8px; width: 220px; background: rgba(43,57,51,.92); color: #F5EBD3; font: 12px/1.5 system-ui, sans-serif; padding: 10px 12px; border-radius: 8px; z-index: 10; }
+      #tuning h3 { font-size: 12px; margin-bottom: 6px; color: #E5A636; cursor: pointer; }
+      #tuning.collapsed .rows { display: none; }
+      #tuning label { display: flex; justify-content: space-between; align-items: center; gap: 6px; margin: 4px 0; }
+      #tuning input[type=range] { flex: 1; }
+      #tuning .val { width: 38px; text-align: right; color: #5F9A6A; }
+    </style>
+  </head>
+  <body>
+    <div id="app"><canvas id="game"></canvas></div>
+    <div id="tuning" class="collapsed"><h3 id="tuningTitle">⚙ 调参面板 (点击展开)</h3><div class="rows"></div></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
