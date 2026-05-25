@@ -15,7 +15,13 @@
       "Bash(git --version)",
       "Bash(git init *)",
       "Bash(git add *)",
-      "Bash(grep -iE '\\\\.\\(mp4|zip\\)$|node_modules|/dist/')"
+      "Bash(grep -iE '\\\\.\\(mp4|zip\\)$|node_modules|/dist/')",
+      "Bash(git -c user.name=kflkf -c user.email=kflkfc@gmail.com commit -m ' *)",
+      "Bash(echo \"name=$\\(git config user.name\\)\")",
+      "Bash(echo \"email=$\\(git config user.email\\)\")",
+      "Bash(echo \"\\(local repo scope only; global untouched: $\\(git config --global user.email 2>&1 || echo none\\)\\)\")",
+      "Bash(awk '{print $5}')",
+      "Bash(xargs -r taskkill //F //PID)"
     ]
   }
 }

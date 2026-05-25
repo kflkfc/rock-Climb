@@ -14,6 +14,7 @@ import { drawHUD, HudHit } from "./render/drawHUD.ts";
 import { burstWin, updateEffects, drawEffects } from "./render/effects.ts";
 import { installPointer } from "./input/pointer.ts";
 import { installTuningPanel } from "./ui/tuningPanel.ts";
+import { sfx } from "./audio/sfx.ts";
 
 const canvas = document.getElementById("game") as HTMLCanvasElement;
 const ctx = canvas.getContext("2d")!;
@@ -45,10 +46,17 @@ resize();
 
 installTuningPanel();
 installPointer(canvas, game, cam, () => hud);
+
+// 音效 + 振动反馈（首次用户手势内解锁 AudioContext）
+canvas.addEventListener("pointerdown", () => sfx.unlock(), { once: true });
+game.onContact = () => sfx.contact();
+game.onGrab = (match) => sfx.grab(match);
+game.onSlip = () => sfx.slip();
 game.onWin = () => {
   const goal = game.holds.find((h) => h.isGoal)!;
   const s = cam.toScreen(goal.pos);
   burstWin(s.x, s.y);
+  sfx.win();
 };
 
 // 开发调试钩子（便于运行时检查状态，不影响玩法）

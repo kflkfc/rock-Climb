@@ -12,6 +12,9 @@ Thumbs.db
 .vscode/
 .idea/
 
+# Claude Code 本地（机器相关）设置，不入库
+.claude/settings.local.json
+
 # 大体积参考素材（超过 GitHub 100MB 单文件上限，不入库）
 # 录屏与压缩包保留在本地 RockClimbing Game/ 下
 *.mp4

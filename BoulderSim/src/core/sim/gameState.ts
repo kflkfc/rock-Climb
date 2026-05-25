@@ -77,6 +77,7 @@ export class Game {
   onWin?: () => void;
   onSlip?: () => void;
   onContact?: () => void;
+  onGrab?: (match: number) => void;
 
   constructor(level: LevelDef) {
     this.load(level);
@@ -250,6 +251,7 @@ export class Game {
     st.match = opt.match;
     st.contactDist = contactDist;
     this.gripCount++;
+    this.onGrab?.(opt.match);
     // 抓到终点岩点（且是手）→ 过关
     if (hold.isGoal && isHand(l)) this.triggerWin();
   }
