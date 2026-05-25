@@ -8,164 +8,199 @@
   :root { --bg:#E6D9B5; --ink:#4F3F30; --green:#2B3933; --card:#cdbd95; }
   * { box-sizing: border-box; }
   body { margin:0; background:var(--bg); color:var(--ink);
-    font-family: system-ui,"PingFang SC",sans-serif; }
+    font-family: system-ui,"PingFang SC",sans-serif; line-height:1.5; }
   header { background:var(--green); color:#F5EBD3; padding:18px 24px; }
   header h1 { margin:0; font-size:22px; letter-spacing:1px; }
-  header p { margin:6px 0 0; font-size:13px; opacity:.85; }
-  .legend { display:flex; gap:18px; flex-wrap:wrap; padding:12px 24px; font-size:13px;
-    background:#d8c9a3; border-bottom:1px solid #b9a886; }
-  .legend span { display:inline-flex; align-items:center; gap:6px; }
-  .dot { width:14px; height:14px; border-radius:3px; display:inline-block; }
-  .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(260px,1fr));
-    gap:18px; padding:24px; max-width:1200px; margin:0 auto; }
+  header p { margin:8px 0 0; font-size:13px; opacity:.9; max-width:880px; }
+  header b { color:#E5A636; }
+  section { max-width:1120px; margin:0 auto; padding:8px 24px 4px; }
+  h2 { font-size:17px; margin:22px 0 4px; color:var(--green);
+    border-left:5px solid #D64A47; padding-left:10px; }
+  .sub { font-size:13px; color:#6f5e49; margin:0 0 10px; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(240px,1fr)); gap:16px; }
   .card { background:var(--card); border:1px solid #a8966f; border-radius:12px;
-    padding:14px; box-shadow:0 2px 8px rgba(60,45,30,.15); }
-  .card canvas { display:block; width:100%; height:200px; border-radius:8px; background:#efe6cd; }
-  .card h2 { margin:10px 0 2px; font-size:18px; }
-  .card .en { font-size:12px; color:#7a6a55; letter-spacing:1px; text-transform:uppercase; }
-  .card .row { font-size:13px; margin-top:8px; line-height:1.5; }
+    padding:12px; box-shadow:0 2px 8px rgba(60,45,30,.15); }
+  .card canvas, .wide canvas { display:block; width:100%; border-radius:8px; background:#efe6cd; }
+  .card h3 { margin:8px 0 2px; font-size:16px; }
+  .card .en { font-size:11px; color:#7a6a55; letter-spacing:1px; text-transform:uppercase; }
+  .card .row { font-size:12.5px; margin-top:6px; }
   .card .row b { color:var(--green); }
-  .tag { display:inline-block; font-size:11px; padding:1px 8px; border-radius:10px;
-    color:#fff; margin-left:6px; vertical-align:middle; }
+  .wide { background:var(--card); border:1px solid #a8966f; border-radius:12px;
+    padding:12px; box-shadow:0 2px 8px rgba(60,45,30,.15); }
+  .note { background:#FEF6E0; border-left:4px solid #E5A636; padding:10px 12px;
+    border-radius:6px; font-size:13px; margin:10px 0 0; }
+  footer { max-width:1120px; margin:0 auto; padding:18px 24px 36px; font-size:12px; color:#8a795f; }
 </style>
 </head>
 <body>
 <header>
   <h1>🧗 岩点图鉴 · Hold Catalog</h1>
-  <p>绿色扇形 = 该岩点能承受力的方向（受力锥）。箭头 = 你要往这个方向拉/推。半透明小人 = 身体重心该落在哪一侧。锥越窄 = 方向越挑、越难吃住。</p>
+  <p>一个岩点的"性格"不是固定的，而是由三件事共同决定：
+  <b>① 形状</b>（决定怎么抓、摩擦）、<b>② 朝向</b>（决定往哪个方向受力）、<b>③ 身体相对位置</b>（决定同一个点是侧拉还是 Gaston）。
+  所以"侧拉/下扣/Gaston"不是独立的岩点，而是<b>用法</b>。绿色扇形=受力锥，箭头=施力方向。</p>
 </header>
-<div class="legend">
-  <span><i class="dot" style="background:#5F9A6A"></i>受力锥 / 对齐方向</span>
-  <span><i class="dot" style="background:#D64A47"></i>错误方向 → 抓不住</span>
-  <span>锥宽 = 容错；锥窄 = 对身体位置要求高</span>
-</div>
-<div class="grid" id="grid"></div>
+
+<section>
+  <h2>① 形状 · 决定怎么抓 / 摩擦</h2>
+  <p class="sub">这是岩点的固有属性。下面默认按"向下挂"画，但同一形状换个朝向就有不同用法（见②③）。</p>
+  <div class="grid" id="shapes"></div>
+</section>
+
+<section>
+  <h2>② 同一块边 · 旋转朝向 → 用法不同</h2>
+  <p class="sub">把<strong>同一块岩石边</strong>转个方向（或换面墙），"下拉点"立刻变成"下扣"或"侧拉"。形状没变，变的是受力锥朝向。</p>
+  <div class="wide"><canvas id="orient" height="240"></canvas></div>
+</section>
+
+<section>
+  <h2>③ 同一个侧拉边 · 身体在不同侧 → Sidepull vs Gaston</h2>
+  <p class="sub">下面两张是<strong>完全相同的一块竖向边</strong>。区别只在身体/手的相对位置与发力方向：把点往身体方向<strong>拉</strong>=侧拉；肘朝外把点往外<strong>推</strong>=Gaston。</p>
+  <div class="wide"><canvas id="relpos" height="240"></canvas></div>
+  <div class="note">所以游戏里不需要"sidepull/gaston"这种独立岩点类型——岩点只存形状 + 朝向(pullDir)，是侧拉还是 Gaston 由"哪只手 + 身体在哪一侧"在受力计算中自然得出。</div>
+</section>
+
+<footer>受力锥越窄 = 对身体位置越挑剔越难吃住（jug 最宽容，sloper/侧拉最挑）。</footer>
 
 <script>
-const TAU = Math.PI*2, D = Math.PI/180;
-// pullDir: 你对岩点施力的方向（屏幕坐标 y 向下：右=0, 下=PI/2, 左=PI, 上=-PI/2）
-const HOLDS = [
-  { key:"jug", cn:"大水罐", color:"#5F9A6A", pullDir:Math.PI/2, tol:70*D,
-    grip:"整手抓握，最舒服", force:"几乎全向、主要向下挂",
-    body:"身体可在下方较大范围，容错最高" },
-  { key:"crimp", cn:"小棱", color:"#B23A57", pullDir:Math.PI/2, tol:42*D,
-    grip:"指尖扣（开掌/半扣/全扣）", force:"向下扣，方向较挑",
-    body:"重心需挂在岩点正下方" },
-  { key:"pinch", cn:"捏点", color:"#6B4A8C", pullDir:Math.PI/2, tol:48*D,
-    grip:"拇指与四指对捏", force:"靠捏合力，向里夹+向下",
-    body:"重心下方，靠捏力维持" },
-  { key:"sloper", cn:"滑面", color:"#E5A636", pullDir:Math.PI/2, tol:36*D,
-    grip:"开掌摩擦 + 身体张力", force:"必须正下方压，最依赖重心",
-    body:"重心要正正挂在下方，偏一点就滑" },
-  { key:"sidepull", cn:"侧拉", color:"#3E8E9C", pullDir:Math.PI, tol:30*D,
-    grip:"侧向拉，身体倒向反侧", force:"横向受力——往一侧拉",
-    body:"身体必须倒/转向相反一侧产生张力" },
-  { key:"undercling", cn:"下扣", color:"#C77D3A", pullDir:-Math.PI/2, tol:40*D,
-    grip:"手心向上往上抠 + 脚下蹬", force:"向上受力，手脚上下对抗",
-    body:"靠手向上、脚向下的上下对抗稳住" },
-  { key:"gaston", cn:"推拉(加斯顿)", color:"#9C5BA0", pullDir:0, tol:30*D,
-    grip:"肘朝外，像扒开电梯门往外推", force:"外推——与侧拉相反",
-    body:"身体在另一侧，靠外推产生张力" },
-];
+const TAU=Math.PI*2, D=Math.PI/180;
 
-function arrow(ctx, x, y, ang, len, color, w){
-  const ex = x+Math.cos(ang)*len, ey = y+Math.sin(ang)*len;
+function arrow(ctx,x,y,ang,len,color,w){
+  const ex=x+Math.cos(ang)*len, ey=y+Math.sin(ang)*len;
   ctx.strokeStyle=color; ctx.fillStyle=color; ctx.lineWidth=w; ctx.lineCap="round";
   ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(ex,ey); ctx.stroke();
-  const a=ang, h=9;
-  ctx.beginPath();
-  ctx.moveTo(ex,ey);
-  ctx.lineTo(ex-Math.cos(a-0.4)*h, ey-Math.sin(a-0.4)*h);
-  ctx.lineTo(ex-Math.cos(a+0.4)*h, ey-Math.sin(a+0.4)*h);
+  const h=9;
+  ctx.beginPath(); ctx.moveTo(ex,ey);
+  ctx.lineTo(ex-Math.cos(ang-0.4)*h, ey-Math.sin(ang-0.4)*h);
+  ctx.lineTo(ex-Math.cos(ang+0.4)*h, ey-Math.sin(ang+0.4)*h);
   ctx.closePath(); ctx.fill();
 }
-
-function drawShape(ctx, h, cx, cy, s){
-  ctx.save(); ctx.translate(cx,cy);
-  ctx.fillStyle=h.color; ctx.strokeStyle="rgba(40,30,20,.35)"; ctx.lineWidth=2;
-  ctx.beginPath();
-  switch(h.key){
-    case "jug": // 大而深，带下方凹口
-      ctx.ellipse(0,-4,s*1.05,s*0.8,0,0,TAU); ctx.fill(); ctx.stroke();
-      ctx.beginPath(); ctx.fillStyle="rgba(20,15,10,.35)";
-      ctx.ellipse(0,s*0.35,s*0.7,s*0.28,0,0,TAU); ctx.fill(); break;
-    case "crimp": // 细小尖棱
-      ctx.moveTo(-s*0.9,s*0.3); ctx.lineTo(0,-s*0.5); ctx.lineTo(s*0.9,s*0.3);
-      ctx.closePath(); ctx.fill(); ctx.stroke(); break;
-    case "pinch": // 竖直凸起
-      ctx.ellipse(0,0,s*0.55,s*1.0,0,0,TAU); ctx.fill(); ctx.stroke();
-      ctx.beginPath(); ctx.fillStyle="rgba(255,255,255,.2)";
-      ctx.ellipse(-s*0.2,0,s*0.16,s*0.7,0,0,TAU); ctx.fill(); break;
-    case "sloper": // 光滑大圆鼓
-      ctx.arc(0,s*0.2,s*1.0,Math.PI,0); ctx.closePath(); ctx.fill(); ctx.stroke();
-      ctx.beginPath(); ctx.fillStyle="rgba(255,255,255,.25)";
-      ctx.ellipse(-s*0.3,-s*0.1,s*0.3,s*0.16,0,0,TAU); ctx.fill(); break;
-    case "sidepull": // 竖向侧脸的边
-      ctx.moveTo(-s*0.3,-s); ctx.quadraticCurveTo(s*0.7,-s*0.4,s*0.6,0);
-      ctx.quadraticCurveTo(s*0.7,s*0.4,-s*0.3,s); ctx.lineTo(-s*0.5,s*0.9);
-      ctx.quadraticCurveTo(-s*0.2,0,-s*0.5,-s*0.9); ctx.closePath();
-      ctx.fill(); ctx.stroke(); break;
-    case "undercling": // 朝下的倒扣（开口向下的弧）
-      ctx.arc(0,-s*0.2,s*1.0,0,Math.PI); ctx.closePath(); ctx.fill(); ctx.stroke();
-      ctx.beginPath(); ctx.fillStyle="rgba(20,15,10,.3)";
-      ctx.ellipse(0,s*0.15,s*0.7,s*0.22,0,0,TAU); ctx.fill(); break;
-    case "gaston": // 侧拉镜像
-      ctx.moveTo(s*0.3,-s); ctx.quadraticCurveTo(-s*0.7,-s*0.4,-s*0.6,0);
-      ctx.quadraticCurveTo(-s*0.7,s*0.4,s*0.3,s); ctx.lineTo(s*0.5,s*0.9);
-      ctx.quadraticCurveTo(s*0.2,0,s*0.5,-s*0.9); ctx.closePath();
-      ctx.fill(); ctx.stroke(); break;
-  }
-  ctx.restore();
-}
-
-function render(canvas, h){
-  const dpr = Math.min(2, window.devicePixelRatio||1);
-  const W = canvas.clientWidth, H = 200;
-  canvas.width = W*dpr; canvas.height = H*dpr;
-  const ctx = canvas.getContext("2d"); ctx.scale(dpr,dpr);
-  ctx.clearRect(0,0,W,H);
-  const cx=W/2, cy=H/2, s=32, R=64;
-  // 受力锥（绿色扇形）
+function cone(ctx,cx,cy,dir,tol,R){
   ctx.save();
-  ctx.fillStyle="rgba(95,154,106,.30)";
-  ctx.beginPath(); ctx.moveTo(cx,cy);
-  ctx.arc(cx,cy,R,h.pullDir-h.tol,h.pullDir+h.tol); ctx.closePath(); ctx.fill();
-  // 锥边虚线
-  ctx.strokeStyle="rgba(95,154,106,.55)"; ctx.setLineDash([4,4]); ctx.lineWidth=1.5;
-  [h.pullDir-h.tol,h.pullDir+h.tol].forEach(a=>{
-    ctx.beginPath(); ctx.moveTo(cx,cy);
-    ctx.lineTo(cx+Math.cos(a)*R, cy+Math.sin(a)*R); ctx.stroke();
-  });
-  ctx.setLineDash([]);
-  ctx.restore();
-  // 身体重心提示（受力方向那一侧的半透明小人头）
-  const bx=cx+Math.cos(h.pullDir)*(R+18), by=cy+Math.sin(h.pullDir)*(R+18);
-  ctx.fillStyle="rgba(80,63,48,.30)";
-  ctx.beginPath(); ctx.arc(bx,by,12,0,TAU); ctx.fill();
-  ctx.fillStyle="rgba(80,63,48,.55)"; ctx.font="10px system-ui"; ctx.textAlign="center";
-  ctx.fillText("重心",bx,by+3);
-  // 岩点本体
-  drawShape(ctx,h,cx,cy,s);
-  // 受力方向箭头
-  arrow(ctx,cx,cy,h.pullDir,R-6,"#3f7a48",3);
+  ctx.fillStyle="rgba(95,154,106,.28)";
+  ctx.beginPath(); ctx.moveTo(cx,cy); ctx.arc(cx,cy,R,dir-tol,dir+tol); ctx.closePath(); ctx.fill();
+  ctx.strokeStyle="rgba(95,154,106,.5)"; ctx.setLineDash([4,4]); ctx.lineWidth=1.5;
+  [dir-tol,dir+tol].forEach(a=>{ ctx.beginPath(); ctx.moveTo(cx,cy);
+    ctx.lineTo(cx+Math.cos(a)*R,cy+Math.sin(a)*R); ctx.stroke(); });
+  ctx.setLineDash([]); ctx.restore();
 }
 
-const grid = document.getElementById("grid");
-HOLDS.forEach(h=>{
+// 四种形状
+function drawShape(ctx,key,cx,cy,s,color){
+  ctx.save(); ctx.translate(cx,cy);
+  ctx.fillStyle=color; ctx.strokeStyle="rgba(40,30,20,.35)"; ctx.lineWidth=2; ctx.beginPath();
+  if(key==="jug"){ ctx.ellipse(0,-4,s*1.05,s*0.8,0,0,TAU); ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.fillStyle="rgba(20,15,10,.35)"; ctx.ellipse(0,s*0.35,s*0.7,s*0.28,0,0,TAU); ctx.fill(); }
+  else if(key==="crimp"){ ctx.moveTo(-s*0.9,s*0.3); ctx.lineTo(0,-s*0.5); ctx.lineTo(s*0.9,s*0.3);
+    ctx.closePath(); ctx.fill(); ctx.stroke(); }
+  else if(key==="pinch"){ ctx.ellipse(0,0,s*0.55,s*1.0,0,0,TAU); ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.fillStyle="rgba(255,255,255,.2)"; ctx.ellipse(-s*0.2,0,s*0.16,s*0.7,0,0,TAU); ctx.fill(); }
+  else if(key==="sloper"){ ctx.arc(0,s*0.2,s*1.0,Math.PI,0); ctx.closePath(); ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.fillStyle="rgba(255,255,255,.25)"; ctx.ellipse(-s*0.3,-s*0.1,s*0.3,s*0.16,0,0,TAU); ctx.fill(); }
+  ctx.restore();
+}
+
+// 一块"边"：可用面朝向 dir（旋转整块）
+function drawEdge(ctx,cx,cy,s,dir,color){
+  ctx.save(); ctx.translate(cx,cy); ctx.rotate(dir);
+  ctx.fillStyle=color; ctx.strokeStyle="rgba(40,30,20,.35)"; ctx.lineWidth=2;
+  ctx.beginPath(); ctx.ellipse(0,0,s*0.95,s*0.7,0,0,TAU); ctx.fill(); ctx.stroke();
+  // 朝 +x（即 dir 方向）的可抓棱线
+  ctx.beginPath(); ctx.strokeStyle="rgba(20,15,10,.5)"; ctx.lineWidth=3;
+  ctx.arc(0,0,s*0.95,-0.7,0.7); ctx.stroke();
+  ctx.restore();
+}
+
+function setup(canvas,h){
+  const dpr=Math.min(2,window.devicePixelRatio||1);
+  const W=canvas.clientWidth; canvas.width=W*dpr; canvas.height=h*dpr;
+  const ctx=canvas.getContext("2d"); ctx.scale(dpr,dpr); return {ctx,W,H:h};
+}
+
+// ① 形状卡
+const SHAPES=[
+  {key:"jug",cn:"大水罐",en:"jug",color:"#5F9A6A",tol:70,grip:"整手抓握，最舒服",extra:"友好度最高、容错最大"},
+  {key:"crimp",cn:"小棱",en:"crimp",color:"#B23A57",tol:24,grip:"指尖扣（开掌/半扣/全扣）",extra:"小而浅，吃方向"},
+  {key:"pinch",cn:"捏点",en:"pinch",color:"#6B4A8C",tol:28,grip:"拇指与四指对捏",extra:"靠捏合力，考验握力"},
+  {key:"sloper",cn:"滑面",en:"sloper",color:"#E5A636",tol:20,grip:"开掌摩擦+身体张力",extra:"无棱，最依赖重心位置"},
+];
+const grid=document.getElementById("shapes");
+SHAPES.forEach(h=>{
   const card=document.createElement("div"); card.className="card";
-  const cv=document.createElement("canvas"); card.appendChild(cv);
-  const tolDeg=Math.round(h.tol/D*2);
+  const cv=document.createElement("canvas"); cv.height=150; card.appendChild(cv);
   card.insertAdjacentHTML("beforeend",
-    `<div class="en">${h.key}</div>
-     <h2>${h.cn}<span class="tag" style="background:${h.color}">锥宽 ${tolDeg}°</span></h2>
+    `<div class="en">${h.en}</div><h3>${h.cn}</h3>
      <div class="row"><b>怎么抓：</b>${h.grip}</div>
-     <div class="row"><b>受力：</b>${h.force}</div>
-     <div class="row"><b>身体：</b>${h.body}</div>`);
+     <div class="row"><b>特点：</b>${h.extra}</div>`);
   grid.appendChild(card);
-  requestAnimationFrame(()=>render(cv,h));
+  requestAnimationFrame(()=>{ const {ctx,W,H}=setup(cv,150); const cx=W/2,cy=H/2;
+    cone(ctx,cx,cy,Math.PI/2,h.tol*D,52);
+    drawShape(ctx,h.key,cx,cy,26,h.color);
+    arrow(ctx,cx,cy,Math.PI/2,46,"#3f7a48",3); });
 });
+
+// ② 旋转朝向
+function renderOrient(){
+  const cv=document.getElementById("orient"); const {ctx,W,H}=setup(cv,240);
+  const items=[
+    {dir:Math.PI/2,cn:"下拉",en:"down-pull"},
+    {dir:-Math.PI/2,cn:"下扣 Undercling",en:"手心向上抠"},
+    {dir:0,cn:"侧拉 →",en:"sidepull"},
+    {dir:Math.PI,cn:"侧拉 ←",en:"sidepull"},
+  ];
+  const cw=W/4;
+  items.forEach((it,i)=>{
+    const cx=cw*i+cw/2, cy=H/2-10;
+    cone(ctx,cx,cy,it.dir,30*D,50);
+    drawEdge(ctx,cx,cy,26,it.dir,"#B23A57");
+    arrow(ctx,cx,cy,it.dir,44,"#3f7a48",3);
+    ctx.fillStyle="#4F3F30"; ctx.textAlign="center";
+    ctx.font="700 14px system-ui"; ctx.fillText(it.cn,cx,H-26);
+    ctx.font="11px system-ui"; ctx.fillStyle="#7a6a55"; ctx.fillText(it.en,cx,H-10);
+  });
+}
+
+// ③ Sidepull vs Gaston（同一块竖向边）
+function climber(ctx,bx,by,hx,hy,color){
+  ctx.strokeStyle=color; ctx.fillStyle=color; ctx.lineWidth=4; ctx.lineCap="round";
+  ctx.beginPath(); ctx.arc(bx,by-20,9,0,TAU); ctx.fill();           // 头
+  ctx.beginPath(); ctx.moveTo(bx,by-12); ctx.lineTo(bx,by+16); ctx.stroke(); // 躯干
+  ctx.beginPath(); ctx.moveTo(bx,by-6); ctx.lineTo((bx+hx)/2,(by+hy)/2-6); ctx.lineTo(hx,hy); ctx.stroke(); // 手臂折线
+}
+function renderRel(){
+  const cv=document.getElementById("relpos"); const {ctx,W,H}=setup(cv,240);
+  const cw=W/2;
+  // 左：Sidepull
+  let cx=cw*0.5, hy=H/2-10, hx=cx-40;
+  drawEdge(ctx,hx,hy,24,Math.PI,"#3E8E9C");      // 同一块边
+  climber(ctx,cx+34,hy+6,hx+10,hy,"#9C7B5A");    // 身体在右
+  arrow(ctx,hx,hy,0,40,"#D64A47",3);             // 把点往身体(右)拉
+  ctx.fillStyle="#4F3F30"; ctx.textAlign="center"; ctx.font="700 15px system-ui";
+  ctx.fillText("Sidepull 侧拉",cx,H-24);
+  ctx.font="12px system-ui"; ctx.fillStyle="#7a6a55";
+  ctx.fillText("身体倒向反侧，把点往身体方向拉",cx,H-8);
+  // 分隔线
+  ctx.strokeStyle="#a8966f"; ctx.setLineDash([5,5]); ctx.beginPath();
+  ctx.moveTo(cw,16); ctx.lineTo(cw,H-40); ctx.stroke(); ctx.setLineDash([]);
+  // 右：Gaston（同一块边）
+  cx=cw*1.5; hx=cx-40;
+  drawEdge(ctx,hx,hy,24,Math.PI,"#3E8E9C");      // 完全相同的边
+  climber(ctx,cx+10,hy+6,hx+12,hy,"#9C7B5A");    // 身体更靠近、肘朝外
+  arrow(ctx,hx,hy,Math.PI,40,"#D64A47",3);       // 把点往外推
+  ctx.fillStyle="#4F3F30"; ctx.textAlign="center"; ctx.font="700 15px system-ui";
+  ctx.fillText("Gaston 加斯顿",cx,H-24);
+  ctx.font="12px system-ui"; ctx.fillStyle="#7a6a55";
+  ctx.fillText("肘朝外，把点往外推（与侧拉反向）",cx,H-8);
+}
+
+function renderAll(){ renderOrient(); renderRel(); }
+requestAnimationFrame(renderAll);
 window.addEventListener("resize",()=>{
-  document.querySelectorAll(".card").forEach((c,i)=>render(c.querySelector("canvas"),HOLDS[i]));
+  document.querySelectorAll("#shapes canvas").forEach((cv,i)=>{
+    const {ctx,W,H}=setup(cv,150); const cx=W/2,cy=H/2; const h=SHAPES[i];
+    cone(ctx,cx,cy,Math.PI/2,h.tol*D,52); drawShape(ctx,h.key,cx,cy,26,h.color);
+    arrow(ctx,cx,cy,Math.PI/2,46,"#3f7a48",3);
+  });
+  renderAll();
 });
 </script>
 </body>
