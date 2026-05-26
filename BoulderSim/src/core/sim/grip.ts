@@ -58,11 +58,26 @@ export function contactAreaScore(distToCenter: number, radius: number): number {
   return clamp(1 - 0.7 * r, 0.25, 1);
 }
 
+/** 两个方向的最小夹角（弧度，0..PI） */
+export function angleDiff(a: number, b: number): number {
+  let d = Math.abs(a - b) % (Math.PI * 2);
+  if (d > Math.PI) d = Math.PI * 2 - d;
+  return d;
+}
+
 /** 朝向匹配：实际受力方向 vs 岩点最佳受力方向（弧度差）。0..1 */
 export function orientationScore(pullRad: number, holdPullDir: number): number {
-  let d = Math.abs(pullRad - holdPullDir) % (Math.PI * 2);
-  if (d > Math.PI) d = Math.PI * 2 - d;
-  return clamp(1 - d / Math.PI, 0.1, 1); // 完全反向=0.1，同向=1
+  return clamp(1 - angleDiff(pullRad, holdPullDir) / Math.PI, 0.1, 1); // 反向=0.1，同向=1
+}
+
+/**
+ * 带容差的方向对齐度（受力锥）：实际受力方向在锥内(≤tol)≈1，
+ * 超出锥后线性衰减到 ~0.1。用于每帧判断"身体是否把力施在岩点可用方向上"。
+ */
+export function directionalFit(loadAngle: number, pullDir: number, tol: number): number {
+  const d = angleDiff(loadAngle, pullDir);
+  if (d <= tol) return 1;
+  return clamp(1 - ((d - tol) / Math.max(0.001, Math.PI - tol)) * 0.9, 0.1, 1);
 }
 
 /** 甜点加成：接触点极接近中心时的小幅奖励 0..0.15 */

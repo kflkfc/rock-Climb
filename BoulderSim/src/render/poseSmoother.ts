@@ -5,7 +5,7 @@
 import { Vec2, lerp } from "../core/math/vec2.ts";
 import { Pose, Limb, LIMBS, resolvePose } from "../core/model/skeleton.ts";
 import { Game } from "../core/sim/gameState.ts";
-import { limbTarget } from "../core/sim/physics.ts";
+import { limbTarget, oriOf } from "../core/sim/physics.ts";
 import { tuning } from "../config/tuning.ts";
 
 export class PoseSmoother {
@@ -15,17 +15,12 @@ export class PoseSmoother {
 
   /** 取得本帧用于渲染的平滑姿态 */
   update(game: Game, dt: number): Pose {
-    // 目标：won 时跟随回放姿态，否则跟随逻辑状态
-    let tgtPelvis: Vec2;
+    // won：直接用回放姿态（已含当时朝向），不再平滑/重算，避免朝向错配
+    if (game.status === "won") return game.renderPose().pose;
+
+    const tgtPelvis = game.c.pelvis;
     const tgtEnds = {} as Record<Limb, Vec2>;
-    if (game.status === "won") {
-      const rp = game.renderPose().pose;
-      tgtPelvis = rp.pelvis;
-      for (const l of LIMBS) tgtEnds[l] = rp.limb[l].ik.end;
-    } else {
-      tgtPelvis = game.c.pelvis;
-      for (const l of LIMBS) tgtEnds[l] = limbTarget(game.c, l);
-    }
+    for (const l of LIMBS) tgtEnds[l] = limbTarget(game.c, l);
 
     // 首帧 / 重置（epoch 变化）/ 掉落 → 直接吸附，避免滑入或残影
     if (!this.pelvis || !this.ends || this.epoch !== game.resetEpoch) {
@@ -41,7 +36,8 @@ export class PoseSmoother {
     this.pelvis = lerp(this.pelvis, tgtPelvis, aPelvis);
     for (const l of LIMBS) this.ends[l] = lerp(this.ends[l], tgtEnds[l], aLimb);
 
-    return resolvePose(game.c.body, this.pelvis, game.c.lean, this.ends);
+    // 朝向（lean/twist）已在物理中逐帧缓动，直接透传
+    return resolvePose(game.c.body, this.pelvis, oriOf(game.c), this.ends);
   }
 
   reset() {

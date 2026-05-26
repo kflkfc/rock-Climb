@@ -21,7 +21,8 @@ export const LEVEL_THREP: LevelDef = {
     { id: "s_rf", type: "jug", x: 255, y: 850, start: "RF" },
 
     // 上行路线（左右交替，间距控制在臂/腿可达内）
-    { id: "h1", type: "jug", x: 150, y: 590 },
+    // h1 = 左侧"侧拉"：朝向向右(0°)，需把身体保持在它右侧、横向受力（非直挂下方）
+    { id: "h1", type: "crimp", x: 150, y: 590, pullDirDeg: 0, pullTolDeg: 70 },
     { id: "h2", type: "pinch", x: 260, y: 560, pullDirDeg: 90 },
     { id: "f1", type: "jug", x: 175, y: 720 },
     { id: "f2", type: "crimp", x: 250, y: 700, pullDirDeg: 90 },
@@ -31,8 +32,10 @@ export const LEVEL_THREP: LevelDef = {
     { id: "f3", type: "jug", x: 165, y: 600 },
     { id: "f4", type: "jug", x: 255, y: 580 },
 
-    { id: "h5", type: "crimp", x: 175, y: 360, pullDirDeg: 90 },
-    { id: "h6", type: "jug", x: 270, y: 340 },
+    // h5 = "下扣"undercling：朝向向上(-90°)，需身体升到它上方、向上抠
+    { id: "h5", type: "crimp", x: 175, y: 360, pullDirDeg: -90, pullTolDeg: 75 },
+    // h6 = 右侧"侧拉"：朝向向左(180°)，身体保持在它左侧横向受力
+    { id: "h6", type: "crimp", x: 270, y: 340, pullDirDeg: 180, pullTolDeg: 70 },
     { id: "f5", type: "jug", x: 190, y: 480 },
     { id: "f6", type: "jug", x: 270, y: 470 },
 

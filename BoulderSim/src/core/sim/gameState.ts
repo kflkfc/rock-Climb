@@ -89,6 +89,7 @@ export class Game {
       makeHold(h.id, h.type, v(h.x, h.y), {
         radius: h.radius,
         pullDir: h.pullDirDeg != null ? (h.pullDirDeg * Math.PI) / 180 : undefined,
+        pullTol: h.pullTolDeg != null ? (h.pullTolDeg * Math.PI) / 180 : undefined,
         isGoal: h.goal,
         startLimb: h.start,
       }),
@@ -111,6 +112,7 @@ export class Game {
         match: 0.9,
         contactDist: 2,
         stamina: 1,
+        align: 1,
         freePos: { ...h.pos },
         slipping: false,
       };
@@ -120,12 +122,15 @@ export class Game {
       (limbs.LF.hold!.pos.x + limbs.RF.hold!.pos.x) / 2,
       (limbs.LH.hold!.pos.y + limbs.LF.hold!.pos.y) / 2,
     );
+    const ori = { lean, shoulderTwist: 0, hipTwist: 0 };
     this.c = {
       body: { ...ADULT },
       pelvis,
       lean,
+      shoulderTwist: 0,
+      hipTwist: 0,
       limbs,
-      pose: resolvePose({ ...ADULT }, pelvis, lean, {
+      pose: resolvePose({ ...ADULT }, pelvis, ori, {
         LH: limbs.LH.hold!.pos,
         RH: limbs.RH.hold!.pos,
         LF: limbs.LF.hold!.pos,

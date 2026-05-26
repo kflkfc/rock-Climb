@@ -5,6 +5,10 @@ export interface Tuning {
   standFrac: number; // 脚抓住时髋立于脚上方 = standFrac × 腿长
   pelvisFollow: number; // 骨盆平滑跟随系数 0..1（每帧 60Hz；越大越跟手）
   limbTau: number; // 渲染平滑时间常数（秒，越小越跟手越硬，越大越柔）
+  dirPenalty: number; // 方向错位惩罚指数（越大错向越致命）
+  tensionCost: number; // 双向对抗(张力)的耐力开销系数
+  rotFollow: number; // 身体旋转缓动系数 0..1（每帧 60Hz）
+  rotLimit: number; // 旋转/偏身限幅（弧度）
   capacity: number; // 抓力上限基准容量（与负载同量纲=体重单位）
   staminaDrain: number; // 耐力消耗系数（越大掉得越快）
   staminaRecover: number; // 自由肢端耐力恢复速度（每秒）
@@ -26,6 +30,10 @@ export const tuning: Tuning = {
   maxForceK: 1.0,
   reachSlack: 1.04,
   fallResetDelay: 1.1,
+  dirPenalty: 1.3,
+  tensionCost: 0.6,
+  rotFollow: 0.12,
+  rotLimit: 0.6,
 };
 
 export interface TuneSpec {
@@ -46,4 +54,8 @@ export const TUNE_SPECS: TuneSpec[] = [
   { key: "standFrac", label: "脚支撑比", min: 0.4, max: 1.1, step: 0.02 },
   { key: "pelvisFollow", label: "骨盆跟随", min: 0.04, max: 0.6, step: 0.02 },
   { key: "limbTau", label: "动作柔度", min: 0.02, max: 0.3, step: 0.01 },
+  { key: "dirPenalty", label: "错向惩罚", min: 0.5, max: 3, step: 0.1 },
+  { key: "tensionCost", label: "张力开销", min: 0, max: 2, step: 0.05 },
+  { key: "rotFollow", label: "旋转跟随", min: 0.03, max: 0.4, step: 0.01 },
+  { key: "rotLimit", label: "旋转限幅", min: 0.2, max: 1.2, step: 0.05 },
 ];

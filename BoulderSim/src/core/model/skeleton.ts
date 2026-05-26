@@ -27,6 +27,19 @@ export interface Pose {
   com: Vec2;
 }
 
+/**
+ * 身体朝向：
+ *  - lean：脊柱倾斜（偏身），左右倾会横移肩与重心 → 驱动方向性受力对齐。
+ *  - shoulderTwist：肩线绕脊柱旋转（躯干面向双手 / 扭身）。
+ *  - hipTwist：髋线绕脊柱旋转（偏身 / 熏膝 / 倒钩）。
+ * 三者独立 → 身体不再直上直下像蜘蛛。
+ */
+export interface Orientation {
+  lean: number;
+  shoulderTwist: number;
+  hipTwist: number;
+}
+
 const UP: Vec2 = { x: 0, y: -1 }; // 屏幕坐标 y 向下，攀爬向上 = -y
 
 export function maxReachOf(b: BodyParams, l: Limb): number {
@@ -35,21 +48,24 @@ export function maxReachOf(b: BodyParams, l: Limb): number {
 
 /**
  * 解算姿态。targets: 各肢端末端世界坐标（被抓住的肢端=岩点位置；自由肢端=把手当前位置）。
+ * ori: 身体朝向（脊柱倾斜 + 肩/髋独立旋转）。
  */
 export function resolvePose(
   b: BodyParams,
   pelvis: Vec2,
-  lean: number,
+  ori: Orientation,
   targets: Record<Limb, Vec2>,
 ): Pose {
-  const up = rotate(UP, lean);
-  const right = { x: -up.y, y: up.x }; // 身体右方向
+  const up = rotate(UP, ori.lean); // 脊柱方向（偏身）
+  const right = { x: -up.y, y: up.x }; // 基准右方向
+  const shoulderRight = rotate(right, ori.shoulderTwist); // 肩线（可绕脊柱扭转）
+  const hipRight = rotate(right, ori.hipTwist); // 髋线（可独立扭转）
 
-  const hipL = add(pelvis, scale(right, -b.hipWidth / 2));
-  const hipR = add(pelvis, scale(right, b.hipWidth / 2));
+  const hipL = add(pelvis, scale(hipRight, -b.hipWidth / 2));
+  const hipR = add(pelvis, scale(hipRight, b.hipWidth / 2));
   const shoulderC = add(pelvis, scale(up, b.torsoLen));
-  const shoulderL = add(shoulderC, scale(right, -b.shoulderWidth / 2));
-  const shoulderR = add(shoulderC, scale(right, b.shoulderWidth / 2));
+  const shoulderL = add(shoulderC, scale(shoulderRight, -b.shoulderWidth / 2));
+  const shoulderR = add(shoulderC, scale(shoulderRight, b.shoulderWidth / 2));
   const neck = add(shoulderC, scale(up, b.neckLen));
   const head = add(neck, scale(up, b.headR));
 

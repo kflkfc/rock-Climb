@@ -19,6 +19,7 @@ import {
   dist,
   len,
   rotate,
+  clamp,
 } from "../math/vec2.ts";
 import { BodyParams } from "../model/body.ts";
 import {
@@ -30,9 +31,10 @@ import {
   armReach,
   legReach,
   Pose,
+  Orientation,
 } from "../model/skeleton.ts";
 import { Hold } from "./holds.ts";
-import { GripMethod, gripTypeScore } from "./grip.ts";
+import { GripMethod, gripTypeScore, contactAreaScore, directionalFit } from "./grip.ts";
 import { drain, recover } from "./stamina.ts";
 import { Tuning } from "../../config/tuning.ts";
 
@@ -40,9 +42,10 @@ export interface LimbState {
   attached: boolean;
   hold: Hold | null;
   grip: GripMethod | null;
-  match: number; // 锁定时算定的匹配度 0..1
+  match: number; // 锁定时算定的匹配度 0..1（抓法环 UI 用）
   contactDist: number; // 接触点离岩点中心距离（接触面积用）
   stamina: number; // 0..1
+  align: number; // 每帧实时方向对齐度 0..1（受力方向落在岩点锥内程度）
   /** 当末端自由时，把手的当前世界位置（被拖动 / 弹回） */
   freePos: Vec2;
   slipping: boolean; // 本帧是否因过载/耗尽而脱手（供特效）
@@ -51,12 +54,19 @@ export interface LimbState {
 export interface Climber {
   body: BodyParams;
   pelvis: Vec2;
-  lean: number; // 身体倾斜（跟随墙角）
+  lean: number; // 脊柱倾斜（偏身，动态）
+  shoulderTwist: number; // 肩线扭转（面向双手）
+  hipTwist: number; // 髋线扭转（偏身/熏膝）
   limbs: Record<Limb, LimbState>;
   pose: Pose;
   /** 失衡持续时间（秒），超阈值触发强制脱手 */
   imbalanceT: number;
   fallen: boolean;
+}
+
+/** 由 Climber 构造姿态解算所需的朝向对象 */
+export function oriOf(c: Climber): Orientation {
+  return { lean: c.lean, shoulderTwist: c.shoulderTwist, hipTwist: c.hipTwist };
 }
 
 export interface StepResult {
@@ -119,7 +129,7 @@ function solvePelvis(c: Climber, dt: number, t: Tuning) {
 
   // 硬钳制：任何抓住肢端都不得超过最大伸展（设计文档：手≤臂长 / 脚≤腿长）
   for (let kk = 0; kk < 4; kk++) {
-    const pose = resolvePose(c.body, c.pelvis, c.lean, targetsOf(c));
+    const pose = resolvePose(c.body, c.pelvis, oriOf(c), targetsOf(c));
     let corr = v(0, 0);
     let n = 0;
     for (const l of attachedLimbs(c)) {
@@ -135,6 +145,35 @@ function solvePelvis(c: Climber, dt: number, t: Tuning) {
     if (n === 0) break;
     c.pelvis = add(c.pelvis, scale(corr, 1 / n));
   }
+}
+
+/**
+ * 求解身体朝向：肩线面向双手、髋线面向双脚、脊柱偏向双手（横移重心去对齐侧向点）。
+ * 目标主要由几何决定 → 稳定不振荡；帧率无关缓动 + 限幅，让身体自然转动而非直上直下。
+ */
+function solveOrientation(c: Climber, dt: number, t: Tuning) {
+  const tg = targetsOf(c);
+  const lim = t.rotLimit;
+  const shoulderTgt = clamp(Math.atan2(tg.RH.y - tg.LH.y, tg.RH.x - tg.LH.x), -lim, lim);
+  const hipTgt = clamp(Math.atan2(tg.RF.y - tg.LF.y, tg.RF.x - tg.LF.x), -lim, lim);
+  const avgHandX = (tg.LH.x + tg.RH.x) / 2;
+  const leanTgt = clamp((avgHandX - c.pelvis.x) / c.body.torsoLen, -1, 1) * lim;
+  const k = 1 - Math.pow(1 - t.rotFollow, dt * 60);
+  c.shoulderTwist += (shoulderTgt - c.shoulderTwist) * k;
+  c.hipTwist += (hipTgt - c.hipTwist) * k;
+  c.lean += (leanTgt - c.lean) * k;
+}
+
+/** 双手受力方向水平相反时的张力需求（夹在两个侧向点之间需主动对抗）。 */
+function handTension(c: Climber, l: Limb, loadAngle: number): number {
+  if (!isHand(l)) return 0;
+  const other: Limb = l === "LH" ? "RH" : "LH";
+  const os = c.limbs[other];
+  if (!os.attached || !os.hold) return 0;
+  const oa = Math.atan2(c.pose.com.y - os.hold.pos.y, c.pose.com.x - os.hold.pos.x);
+  const hx1 = Math.cos(loadAngle);
+  const hx2 = Math.cos(oa);
+  return hx1 * hx2 < 0 ? Math.min(Math.abs(hx1), Math.abs(hx2)) * 30 : 0;
 }
 
 function targetsOf(c: Climber): Record<Limb, Vec2> {
@@ -159,7 +198,7 @@ export function stepClimber(
   const res: StepResult = { slipped: [], fell: false, balanced: true, comInside: true };
   for (const l of LIMBS) c.limbs[l].slipping = false;
   if (c.fallen) {
-    c.pose = resolvePose(c.body, c.pelvis, c.lean, targetsOf(c));
+    c.pose = resolvePose(c.body, c.pelvis, oriOf(c), targetsOf(c));
     return res;
   }
 
@@ -168,9 +207,10 @@ export function stepClimber(
   const Fpara = c.body.weight * para; // 沿墙下滑总力
   const Fperp = c.body.weight * perp; // 垂墙（拉离/压入）总力
 
-  // 1+ 骨盆跟随 & 姿态
+  // 1+ 骨盆跟随 & 身体朝向 & 姿态
   solvePelvis(c, dt, t);
-  c.pose = resolvePose(c.body, c.pelvis, c.lean, targetsOf(c));
+  solveOrientation(c, dt, t);
+  c.pose = resolvePose(c.body, c.pelvis, oriOf(c), targetsOf(c));
 
   const att = attachedLimbs(c);
 
@@ -203,6 +243,7 @@ export function stepClimber(
   const wFoot = footCount > 0 ? (1 - handFrac) / footCount : 0;
   const totalLoad = Fpara + Fperp * 0.6;
 
+  const com = c.pose.com;
   for (const l of att) {
     const st = c.limbs[l];
     const hold = st.hold!;
@@ -211,30 +252,45 @@ export function stepClimber(
     // 失衡时该侧负载放大（核心越稳放大越小）
     if (!comInside) load *= 1 + t.imbalanceDrain * (1.2 - c.body.coreStability);
 
+    // 方向对齐（每帧实时）：手悬向重心 / 脚撑离重心 的受力轴 vs 岩点可用方向锥。
+    // 身体（重心）位置/旋转改变受力轴 → 错向则 align 低 → 抓力骤降、耐力急耗。
+    const loadAngle = isHand(l)
+      ? Math.atan2(com.y - hold.pos.y, com.x - hold.pos.x)
+      : Math.atan2(hold.pos.y - com.y, hold.pos.x - com.x);
+    const align = directionalFit(loadAngle, hold.pullDir, hold.pullTol);
+    st.align = align;
+    const alignEff = Math.pow(align, t.dirPenalty);
+
     const adapt = gripTypeScore(hold.type, st.grip!);
-    // 抓力上限与负载同量纲（体重单位）。不乘疲劳——疲劳由耐力独立处理，
-    // 仅当严重过载(>1.6×)才立即脱手；错误抓法主要表现为耐力急耗（教学性）。
+    const baseMatch = adapt * contactAreaScore(st.contactDist, hold.radius);
+    const liveMatch = Math.max(0.05, baseMatch * alignEff);
+
+    // 抓力上限（体重单位），随对齐缩放：错向有效抓力骤降；不乘疲劳（耐力独立处理）。
     const maxForce =
       hold.friendliness *
       (0.5 + 0.5 * adapt) *
       c.body.fingerStrength *
       t.capacity *
       t.maxForceK;
+    const effMax = maxForce * (0.3 + 0.7 * alignEff);
 
-    // 耐力消耗速度 = 负载 ÷ 匹配度 × (1/指力)（匹配度越低掉得越快）
+    // 张力对抗：夹在两个方向相反的点之间需主动发力维持，叠加耐力消耗
+    const tension = handTension(c, l, loadAngle) * t.tensionCost * (1.2 - c.body.coreStability);
+
+    // 耐力消耗 = 负载 ÷ 实时匹配度 × (1/指力) + 张力开销（匹配/对齐越低掉得越快）
     const drainRate =
-      (load / Math.max(0.08, st.match)) *
-      (1 / Math.max(0.2, c.body.fingerStrength)) *
-      t.staminaDrain *
+      ((load / liveMatch) * (1 / Math.max(0.2, c.body.fingerStrength)) * t.staminaDrain +
+        tension) *
       0.0013;
     st.stamina = drain(st.stamina, drainRate, dt);
 
-    const overloaded = load > maxForce * 1.6;
+    const overloaded = load > effMax * 1.6;
     if (overloaded || st.stamina <= 0) {
       st.attached = false;
       st.hold = null;
       st.grip = null;
       st.slipping = true;
+      st.align = 1;
       st.freePos = limbTargetFallback(c, l);
       res.slipped.push(l);
     }
@@ -252,6 +308,7 @@ export function stepClimber(
       st.hold = null;
       st.grip = null;
       st.slipping = true;
+      st.align = 1;
       st.freePos = limbTargetFallback(c, weakest);
       res.slipped.push(weakest);
       c.imbalanceT = 0;
@@ -261,7 +318,10 @@ export function stepClimber(
   // 恢复自由肢端耐力
   for (const l of LIMBS) {
     const st = c.limbs[l];
-    if (!st.attached) st.stamina = recover(st.stamina, t.staminaRecover, dt);
+    if (!st.attached) {
+      st.stamina = recover(st.stamina, t.staminaRecover, dt);
+      st.align = 1;
+    }
   }
 
   // 再次掉落判定
@@ -270,13 +330,13 @@ export function stepClimber(
     res.fell = true;
   }
 
-  c.pose = resolvePose(c.body, c.pelvis, c.lean, targetsOf(c));
+  c.pose = resolvePose(c.body, c.pelvis, oriOf(c), targetsOf(c));
   return res;
 }
 
 /** 脱手后把手回弹到根关节附近一个可见位置 */
 function limbTargetFallback(c: Climber, l: Limb): Vec2 {
-  const pose = c.pose ?? resolvePose(c.body, c.pelvis, c.lean, targetsOf(c));
+  const pose = c.pose ?? resolvePose(c.body, c.pelvis, oriOf(c), targetsOf(c));
   const root = pose.limb[l].root;
   const reach = maxReachOf(c.body, l) * 0.55;
   return add(root, v(isHand(l) ? 0 : 0, isHand(l) ? -reach * 0.3 : reach * 0.6));

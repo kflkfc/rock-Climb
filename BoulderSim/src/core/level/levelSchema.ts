@@ -10,7 +10,8 @@ export interface HoldDef {
   x: number;
   y: number; // 世界坐标，y 向下；越小越靠上（终点在上方）
   radius?: number;
-  pullDirDeg?: number; // 最佳受力方向（度，90=向下拉）
+  pullDirDeg?: number; // 朝向：最佳受力方向（度，90=向下拉，0=右，-90=上，180=左）
+  pullTolDeg?: number; // 受力锥半角（度）；不填用该形状默认
   goal?: boolean; // 终点岩点（彩虹标识）
   start?: Limb; // 起始时该肢端预置于此
 }

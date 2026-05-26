@@ -12,8 +12,13 @@ export interface Hold {
   radius: number; // 视觉 + 接触半径
   friendliness: number; // 基础友好度 0..1（越大越好抓）
   friction: number; // 摩擦标量 0..1（切片仅用此标量）
-  /** 最佳受力方向（弧度，0=右，PI/2=下）。Crimp 通常向下拉。 */
+  /**
+   * 朝向：岩点能最好承受力的方向（弧度，0=右，PI/2=下，-PI/2=上，PI=左）。
+   * "侧拉/下扣"= 普通形状 + 非向下的 pullDir，无需独立类型。
+   */
   pullDir: number;
+  /** 可用受力锥的半角（弧度）。越小越挑方向：jug 宽、sloper/侧拉窄。 */
+  pullTol: number;
   isGoal?: boolean;
   /** 关卡起始点：游戏开始时该肢端预置于此 */
   startLimb?: Limb;
@@ -21,12 +26,12 @@ export interface Hold {
 
 export const HOLD_META: Record<
   HoldType,
-  { friendliness: number; friction: number; label: string }
+  { friendliness: number; friction: number; pullTol: number; label: string }
 > = {
-  jug: { friendliness: 0.95, friction: 0.9, label: "JUG 大水罐" },
-  crimp: { friendliness: 0.45, friction: 0.7, label: "CRIMP 小棱" },
-  pinch: { friendliness: 0.6, friction: 0.75, label: "PINCH 捏点" },
-  sloper: { friendliness: 0.5, friction: 0.85, label: "SLOPER 滑面" },
+  jug: { friendliness: 0.95, friction: 0.9, pullTol: 1.2, label: "JUG 大水罐" },
+  crimp: { friendliness: 0.45, friction: 0.7, pullTol: 0.42, label: "CRIMP 小棱" },
+  pinch: { friendliness: 0.6, friction: 0.75, pullTol: 0.5, label: "PINCH 捏点" },
+  sloper: { friendliness: 0.5, friction: 0.85, pullTol: 0.36, label: "SLOPER 滑面" },
 };
 
 export const HOLD_COLOR: Record<HoldType, string> = {
@@ -40,7 +45,7 @@ export function makeHold(
   id: string,
   type: HoldType,
   pos: Vec2,
-  opts: Partial<Pick<Hold, "radius" | "pullDir" | "isGoal" | "startLimb">> = {},
+  opts: Partial<Pick<Hold, "radius" | "pullDir" | "pullTol" | "isGoal" | "startLimb">> = {},
 ): Hold {
   const m = HOLD_META[type];
   return {
@@ -51,6 +56,7 @@ export function makeHold(
     friendliness: m.friendliness,
     friction: m.friction,
     pullDir: opts.pullDir ?? Math.PI / 2, // 默认向下拉
+    pullTol: opts.pullTol ?? m.pullTol,
     isGoal: opts.isGoal,
     startLimb: opts.startLimb,
   };
