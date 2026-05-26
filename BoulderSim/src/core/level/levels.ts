@@ -14,11 +14,11 @@ export const LEVEL_THREP: LevelDef = {
   goalHoldId: "goal",
   starThreshold: 6,
   holds: [
-    // 起始 4 点（底部，预置四肢）
-    { id: "s_lh", type: "jug", x: 175, y: 690, start: "LH" },
-    { id: "s_rh", type: "jug", x: 255, y: 670, start: "RH" },
-    { id: "s_lf", type: "jug", x: 180, y: 840, start: "LF" },
-    { id: "s_rf", type: "jug", x: 255, y: 850, start: "RF" },
+    // 起始 4 点：手高于头(上举)、脚在下(站立)，让起手姿态自然舒展而非半蹲蛙形
+    { id: "s_lh", type: "jug", x: 196, y: 574, start: "LH" },
+    { id: "s_rh", type: "jug", x: 248, y: 560, start: "RH" },
+    { id: "s_lf", type: "jug", x: 182, y: 846, start: "LF" },
+    { id: "s_rf", type: "jug", x: 252, y: 852, start: "RF" },
 
     // 上行路线（左右交替，间距控制在臂/腿可达内）
     // h1 = 左侧"侧拉"：朝向向右(0°)，需把身体保持在它右侧、横向受力（非直挂下方）

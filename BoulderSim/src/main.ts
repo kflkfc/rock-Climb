@@ -62,11 +62,7 @@ game.onWin = () => {
 // 开发调试钩子（便于运行时检查状态，不影响玩法）
 (window as unknown as { __game: Game }).__game = game;
 
-let last = performance.now();
-function frame(now: number) {
-  const dt = Math.min(0.033, (now - last) / 1000);
-  last = now;
-
+function tick(dt: number) {
   game.update(dt);
   updateEffects(dt);
 
@@ -84,7 +80,16 @@ function frame(now: number) {
   drawEffects(ctx, cam, game);
   drawGripRing(ctx, cam, game);
   hud = drawHUD(ctx, cam, game);
+}
 
+// 开发调试：允许在后台标签页（RAF 被挂起）时手动驱动一帧用于截图验证
+(window as unknown as { __tick: (dt: number) => void }).__tick = tick;
+
+let last = performance.now();
+function frame(now: number) {
+  const dt = Math.min(0.033, (now - last) / 1000);
+  last = now;
+  tick(dt);
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);

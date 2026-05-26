@@ -107,21 +107,30 @@ function solvePelvis(c: Climber, dt: number, t: Tuning) {
   const down = scale(up, -1); // 沿墙向下（重力）
   const torsoDown = scale(up, -c.body.torsoLen); // 肩→骨盆 偏移
 
-  const att = attachedLimbs(c);
-  if (att.length > 0) {
-    let tgt = v(0, 0);
-    for (const l of att) {
-      const hold = c.limbs[l].hold!;
-      if (isHand(l)) {
-        // 肩悬于手下方 hangFrac×臂长 → 骨盆 = 肩目标 +(骨盆-肩)
-        const shoulderTgt = add(hold.pos, scale(down, armReach(c.body) * t.hangFrac));
-        tgt = add(tgt, add(shoulderTgt, torsoDown));
-      } else {
-        // 髋立于脚上方 standFrac×腿长（≈骨盆）
-        tgt = add(tgt, add(hold.pos, scale(up, legReach(c.body) * t.standFrac)));
-      }
+  // 全部肢端共同决定骨盆目标：抓住=权重1；自由(正在伸手)=权重 reachLead，
+  // 让身体"跟着伸手一起动"（联动/重心跟随），而不是只有那条胳膊在伸。
+  let tgt = v(0, 0);
+  let wsum = 0;
+  for (const l of LIMBS) {
+    const st = c.limbs[l];
+    const attached = st.attached && st.hold;
+    // 站立优先：脚承重权重高(身体立于腿上、腿伸直、髋下沉)，手权重低(手放松上举)，
+    // → 自然攀岩站姿而非"半蹲蛙形"。自由(伸手)肢端用 reachLead 让身体跟随。
+    const w = attached ? (isHand(l) ? 0.55 : 1.0) : t.reachLead;
+    if (w <= 0) continue;
+    const pos = attached ? st.hold!.pos : st.freePos;
+    let contrib: Vec2;
+    if (isHand(l)) {
+      const shoulderTgt = add(pos, scale(down, armReach(c.body) * t.hangFrac));
+      contrib = add(shoulderTgt, torsoDown);
+    } else {
+      contrib = add(pos, scale(up, legReach(c.body) * t.standFrac));
     }
-    const target = scale(tgt, 1 / att.length);
+    tgt = add(tgt, scale(contrib, w));
+    wsum += w;
+  }
+  if (wsum > 0) {
+    const target = scale(tgt, 1 / wsum);
     // 帧率无关的平滑跟随：身体逐步追上肢端 → 攀爬有"发力上移"的手感
     const k = 1 - Math.pow(1 - t.pelvisFollow, dt * 60);
     c.pelvis = add(c.pelvis, scale(sub(target, c.pelvis), k));

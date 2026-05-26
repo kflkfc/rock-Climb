@@ -37,8 +37,14 @@ export function solve2Bone(
 
   // 余弦定理求肘角对应的沿/垂分量
   const a = clamp((l1 * l1 + d * d - l2 * l2) / (2 * l1 * d), -1, 1);
-  const along = l1 * a;
-  const h = Math.sqrt(Math.max(0, l1 * l1 - along * along));
+  let along = l1 * a;
+  let h = Math.sqrt(Math.max(0, l1 * l1 - along * along));
+  // 保底最小弯曲：肘/膝永不完全锁直（否则四肢像僵直木棍）。上臂长保持 l1 不变。
+  const hMin = l1 * 0.16; // ≈ 9° 最小弯曲
+  if (h < hMin) {
+    h = hMin;
+    along = Math.sqrt(Math.max(0, l1 * l1 - h * h));
+  }
   const perp = { x: -dir.y, y: dir.x }; // 法向
   const joint = add(add(root, scale(dir, along)), scale(perp, h * bendSign));
 
