@@ -5,22 +5,100 @@ import { Game } from "../core/sim/gameState.ts";
 import { Hold, HOLD_COLOR } from "../core/sim/holds.ts";
 import { LIMBS } from "../core/model/skeleton.ts";
 
-function holdPath(ctx: CanvasRenderingContext2D, h: Hold, r: number) {
+const OUTLINE = "rgba(40,30,20,0.4)";
+
+/** 描出岩点大致轮廓（投影用）。crimp/方向点按 pullDir 朝向。 */
+function holdSilhouette(ctx: CanvasRenderingContext2D, h: Hold, r: number) {
   ctx.beginPath();
   if (h.type === "jug") {
-    ctx.ellipse(0, 0, r, r * 0.82, 0, 0, Math.PI * 2);
+    ctx.ellipse(0, 0, r * 1.08, r * 0.92, 0, 0, Math.PI * 2);
   } else if (h.type === "crimp") {
-    // 尖三角（小棱 = 难抓的视觉暗示）
-    ctx.moveTo(0, -r);
-    ctx.lineTo(r * 0.9, r * 0.7);
-    ctx.lineTo(-r * 0.9, r * 0.7);
-    ctx.closePath();
+    // 薄棱：长轴垂直于受力方向（下拉=横棱，侧拉=竖棱）
+    const a = h.pullDir + Math.PI / 2;
+    ctx.ellipse(0, 0, r * 1.25, r * 0.5, a, 0, Math.PI * 2);
   } else if (h.type === "pinch") {
-    ctx.ellipse(0, 0, r * 0.7, r, 0, 0, Math.PI * 2);
+    const a = h.pullDir - Math.PI / 2; // 长轴沿受力方向
+    ctx.ellipse(0, 0, r * 0.62, r * 1.15, a, 0, Math.PI * 2);
   } else {
-    // sloper：圆鼓的滑面
-    ctx.arc(0, 0, r, 0, Math.PI * 2);
+    ctx.arc(0, r * 0.2, r * 1.05, Math.PI, 0);
+    ctx.closePath();
   }
+}
+
+/** 绘制岩点本体 + 特征细节，让 4 类一眼可辨、方向点显出朝向。 */
+function paintHold(ctx: CanvasRenderingContext2D, h: Hold, r: number, col: string) {
+  ctx.save();
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = OUTLINE;
+  if (h.type === "jug") {
+    // 大而饱满 + 深凹口（可整手抠进去）+ 顶部高光
+    ctx.beginPath();
+    ctx.ellipse(0, 0, r * 1.08, r * 0.92, 0, 0, Math.PI * 2);
+    ctx.fillStyle = col;
+    ctx.fill();
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.ellipse(0, r * 0.34, r * 0.66, r * 0.4, 0, 0, Math.PI * 2);
+    ctx.fillStyle = "rgba(20,14,8,0.4)"; // 凹口阴影
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(-r * 0.32, -r * 0.42, r * 0.42, r * 0.22, -0.4, 0, Math.PI * 2);
+    ctx.fillStyle = "rgba(255,255,255,0.3)";
+    ctx.fill();
+  } else if (h.type === "crimp") {
+    // 朝向 pullDir 的薄棱：本体细长 + 受力侧一道亮棱线
+    ctx.save();
+    ctx.rotate(h.pullDir); // 局部 +x = 受力方向
+    ctx.beginPath();
+    // 细长棱：沿局部 y(垂直受力) 长、沿 x 薄
+    if (ctx.roundRect) ctx.roundRect(-r * 0.42, -r * 1.18, r * 0.84, r * 2.36, r * 0.35);
+    else ctx.rect(-r * 0.42, -r * 1.18, r * 0.84, r * 2.36);
+    ctx.fillStyle = col;
+    ctx.fill();
+    ctx.stroke();
+    // 亮棱线：在受力反侧(局部 -x)，表示可扣的尖边
+    ctx.beginPath();
+    ctx.moveTo(-r * 0.34, -r * 0.95);
+    ctx.lineTo(-r * 0.34, r * 0.95);
+    ctx.strokeStyle = "rgba(255,255,255,0.55)";
+    ctx.lineWidth = 2.5;
+    ctx.stroke();
+    ctx.restore();
+  } else if (h.type === "pinch") {
+    // 竖柱(沿受力方向) + 中缝把它分成两片(拇指/四指对捏)
+    ctx.save();
+    ctx.rotate(h.pullDir - Math.PI / 2);
+    ctx.beginPath();
+    if (ctx.roundRect) ctx.roundRect(-r * 0.62, -r * 1.12, r * 1.24, r * 2.24, r * 0.4);
+    else ctx.rect(-r * 0.62, -r * 1.12, r * 1.24, r * 2.24);
+    ctx.fillStyle = col;
+    ctx.fill();
+    ctx.stroke();
+    ctx.beginPath(); // 中缝
+    ctx.moveTo(0, -r * 0.9);
+    ctx.lineTo(0, r * 0.9);
+    ctx.strokeStyle = "rgba(20,14,8,0.4)";
+    ctx.lineWidth = 2.5;
+    ctx.stroke();
+    ctx.beginPath(); // 左片高光
+    ctx.ellipse(-r * 0.28, 0, r * 0.16, r * 0.7, 0, 0, Math.PI * 2);
+    ctx.fillStyle = "rgba(255,255,255,0.22)";
+    ctx.fill();
+    ctx.restore();
+  } else {
+    // sloper：光滑圆鼓、无棱，大片柔光
+    ctx.beginPath();
+    ctx.arc(0, r * 0.2, r * 1.05, Math.PI, 0);
+    ctx.closePath();
+    ctx.fillStyle = col;
+    ctx.fill();
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.ellipse(-r * 0.28, -r * 0.18, r * 0.5, r * 0.26, -0.3, 0, Math.PI * 2);
+    ctx.fillStyle = "rgba(255,255,255,0.3)";
+    ctx.fill();
+  }
+  ctx.restore();
 }
 
 export function drawHolds(ctx: CanvasRenderingContext2D, cam: Camera, game: Game) {
@@ -33,7 +111,7 @@ export function drawHolds(ctx: CanvasRenderingContext2D, cam: Camera, game: Game
     ctx.save();
     ctx.translate(s.x + 3, s.y + 5);
     ctx.fillStyle = "rgba(60,45,30,0.18)";
-    holdPath(ctx, h, r);
+    holdSilhouette(ctx, h, r);
     ctx.fill();
     ctx.restore();
 
@@ -55,19 +133,7 @@ export function drawHolds(ctx: CanvasRenderingContext2D, cam: Camera, game: Game
     // 本体
     ctx.save();
     ctx.translate(s.x, s.y);
-    holdPath(ctx, h, r);
-    ctx.fillStyle = col;
-    ctx.fill();
-    ctx.lineWidth = 2;
-    ctx.strokeStyle = "rgba(40,30,20,0.35)";
-    ctx.stroke();
-    // 高光（圆=好抓）
-    if (h.type === "jug" || h.type === "sloper") {
-      ctx.beginPath();
-      ctx.ellipse(-r * 0.3, -r * 0.3, r * 0.3, r * 0.2, 0, 0, Math.PI * 2);
-      ctx.fillStyle = "rgba(255,255,255,0.28)";
-      ctx.fill();
-    }
+    paintHold(ctx, h, r, col);
     ctx.restore();
   }
 }
