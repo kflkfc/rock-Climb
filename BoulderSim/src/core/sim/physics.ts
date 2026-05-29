@@ -114,9 +114,9 @@ function solvePelvis(c: Climber, dt: number, t: Tuning) {
   for (const l of LIMBS) {
     const st = c.limbs[l];
     const attached = st.attached && st.hold;
-    // 站立优先：脚承重权重高(身体立于腿上、腿伸直、髋下沉)，手权重低(手放松上举)，
-    // → 自然攀岩站姿而非"半蹲蛙形"。自由(伸手)肢端用 reachLead 让身体跟随。
-    const w = attached ? (isHand(l) ? 0.55 : 1.0) : t.reachLead;
+    // 偏向"挂在直臂上"：手权重高(肩远离手→手臂打直、省力悬挂)，脚权重略低
+    // (腿屈伸自适应、不与直臂冲突)。自由(伸手)肢端用 reachLead 让身体跟随。
+    const w = attached ? (isHand(l) ? 0.85 : 0.8) : t.reachLead;
     if (w <= 0) continue;
     const pos = attached ? st.hold!.pos : st.freePos;
     let contrib: Vec2;
@@ -355,12 +355,21 @@ export function stepClimber(
   return res;
 }
 
-/** 脱手后把手回弹到根关节附近一个可见位置 */
-function limbTargetFallback(c: Climber, l: Limb): Vec2 {
+/**
+ * 自由肢端的自然悬挂位置：从根关节沿重力方向下垂至近满伸展。
+ * 脚下垂≈直腿(0.9)，手垂手略屈(0.62) → 自由腿不会过弯、手自然垂放。
+ */
+export function naturalDangle(c: Climber, l: Limb): Vec2 {
   const pose = c.pose ?? resolvePose(c.body, c.pelvis, oriOf(c), targetsOf(c));
   const root = pose.limb[l].root;
-  const reach = maxReachOf(c.body, l) * 0.55;
-  return add(root, v(isHand(l) ? 0 : 0, isHand(l) ? -reach * 0.3 : reach * 0.6));
+  const downDir = rotate({ x: 0, y: 1 }, c.lean);
+  const frac = isHand(l) ? 0.62 : 0.9;
+  return add(root, scale(downDir, maxReachOf(c.body, l) * frac));
+}
+
+/** 脱手后把手回到自然悬挂位置 */
+function limbTargetFallback(c: Climber, l: Limb): Vec2 {
+  return naturalDangle(c, l);
 }
 
 /**

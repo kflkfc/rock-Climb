@@ -21,8 +21,8 @@ export interface Tuning {
 }
 
 export const tuning: Tuning = {
-  hangFrac: 0.88,
-  standFrac: 0.9,
+  hangFrac: 0.95,
+  standFrac: 0.85,
   reachLead: 0.4,
   balanceShift: 0.18,
   pelvisFollow: 0.16,

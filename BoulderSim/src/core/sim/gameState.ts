@@ -30,6 +30,7 @@ import {
   stepClimber,
   limbTarget,
   attachedLimbs,
+  naturalDangle,
 } from "./physics.ts";
 import { LevelDef } from "../level/levelSchema.ts";
 import { tuning } from "../../config/tuning.ts";
@@ -199,9 +200,8 @@ export class Game {
     this.dragging = null;
     this.hoverHold = null;
     if (!hold) {
-      // 弹回根关节附近
-      const root = this.c.pose.limb[l].root;
-      this.c.limbs[l].freePos = add(root, v(0, isHand(l) ? -20 : 40));
+      // 未落在岩点：肢端回到自然悬挂位（脚直腿下垂、手自然垂放）
+      this.c.limbs[l].freePos = naturalDangle(this.c, l);
       return;
     }
     const contact = clampLen(sub(this.dragPos, hold.pos), hold.radius);
@@ -242,8 +242,7 @@ export class Game {
   cancelRing() {
     if (!this.ring) return;
     const l = this.ring.limb;
-    const root = this.c.pose.limb[l].root;
-    this.c.limbs[l].freePos = add(root, v(0, isHand(l) ? -20 : 40));
+    this.c.limbs[l].freePos = naturalDangle(this.c, l);
     this.ring = null;
     this.status = "climbing";
   }
