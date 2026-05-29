@@ -136,6 +136,18 @@ function solvePelvis(c: Climber, dt: number, t: Tuning) {
     c.pelvis = add(c.pelvis, scale(sub(target, c.pelvis), k));
   }
 
+  // 两/三点平衡(counterbalance)：抬肢减少支撑时，重心(骨盆 X)主动移到剩余支撑点上方，
+  // 读出"靠剩余两三点平衡、再发力移动"，而非四点死贴墙。抬得越多移得越果断。
+  const sup = attachedLimbs(c);
+  if (sup.length >= 1 && sup.length < 4) {
+    let cx = 0;
+    for (const l of sup) cx += c.limbs[l].hold!.pos.x;
+    cx /= sup.length;
+    const strength = Math.min(0.9, (4 - sup.length) * t.balanceShift);
+    const kb = 1 - Math.pow(1 - strength, dt * 60);
+    c.pelvis.x += (cx - c.pelvis.x) * kb;
+  }
+
   // 硬钳制：任何抓住肢端都不得超过最大伸展（设计文档：手≤臂长 / 脚≤腿长）
   for (let kk = 0; kk < 4; kk++) {
     const pose = resolvePose(c.body, c.pelvis, oriOf(c), targetsOf(c));
