@@ -1,7 +1,8 @@
 // 全部物理常数集中此处（应对"调参地狱"）。调参面板直接改这个对象的字段。
 
 export interface Tuning {
-  hangFrac: number; // 手抓住时肩悬于手下方 = hangFrac × 臂长（越大越接近直臂悬挂、越省力）
+  hangFrac: number; // 休息时肩悬于手下方 = hangFrac × 臂长（越大越接近直臂悬挂、越省力）
+  pullHang: number; // 发力(移动)时肩悬比例（更小=屈臂锁定上拉，带动重心上移）
   standFrac: number; // 脚抓住时髋立于脚上方 = standFrac × 腿长（越大腿越直、越站得起来）
   reachLead: number; // 伸手时身体跟随系数：自由肢端对骨盆目标的权重（联动/重心跟随）
   balanceShift: number; // 两/三点平衡时重心移向支撑点的果断程度（counterbalance）
@@ -22,6 +23,7 @@ export interface Tuning {
 
 export const tuning: Tuning = {
   hangFrac: 0.95,
+  pullHang: 0.7,
   standFrac: 0.85,
   reachLead: 0.4,
   balanceShift: 0.18,
@@ -55,6 +57,7 @@ export const TUNE_SPECS: TuneSpec[] = [
   { key: "imbalanceDrain", label: "失衡惩罚", min: 0, max: 2, step: 0.05 },
   { key: "maxForceK", label: "抓力上限", min: 0.3, max: 2.5, step: 0.05 },
   { key: "hangFrac", label: "手悬挂比", min: 0.4, max: 1.05, step: 0.02 },
+  { key: "pullHang", label: "锁臂屈度", min: 0.4, max: 1.0, step: 0.02 },
   { key: "standFrac", label: "脚支撑比", min: 0.4, max: 1.05, step: 0.02 },
   { key: "reachLead", label: "伸手联动", min: 0, max: 0.9, step: 0.05 },
   { key: "balanceShift", label: "重心平衡", min: 0, max: 0.5, step: 0.02 },

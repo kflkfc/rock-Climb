@@ -30,7 +30,6 @@ import {
   stepClimber,
   limbTarget,
   attachedLimbs,
-  naturalDangle,
 } from "./physics.ts";
 import { LevelDef } from "../level/levelSchema.ts";
 import { tuning } from "../../config/tuning.ts";
@@ -139,6 +138,8 @@ export class Game {
       }),
       imbalanceT: 0,
       fallen: false,
+      draggingLimb: null,
+      pullBlend: 0,
     };
     this.status = "climbing";
     this.gripCount = 0;
@@ -175,6 +176,7 @@ export class Game {
     st.grip = null;
     st.freePos = { ...worldPos };
     this.dragging = best;
+    this.c.draggingLimb = best; // 物理不自动摆放此肢端（由拖动控制）
     this.dragPos = { ...worldPos };
     return true;
   }
@@ -198,10 +200,10 @@ export class Game {
     const l = this.dragging;
     const hold = this.hoverHold;
     this.dragging = null;
+    this.c.draggingLimb = null; // 交还物理：solveFreeLimbs 柔和摆放(flag/放松悬)，不突跳
     this.hoverHold = null;
     if (!hold) {
-      // 未落在岩点：肢端回到自然悬挂位（脚直腿下垂、手自然垂放）
-      this.c.limbs[l].freePos = naturalDangle(this.c, l);
+      // 未落在岩点：保持当前位置，由 solveFreeLimbs 柔和过渡到自然姿态（不突然下垂）
       return;
     }
     const contact = clampLen(sub(this.dragPos, hold.pos), hold.radius);
@@ -241,8 +243,7 @@ export class Game {
 
   cancelRing() {
     if (!this.ring) return;
-    const l = this.ring.limb;
-    this.c.limbs[l].freePos = naturalDangle(this.c, l);
+    // 保持当前位置，由 solveFreeLimbs 柔和过渡到自然姿态
     this.ring = null;
     this.status = "climbing";
   }

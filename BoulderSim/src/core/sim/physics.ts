@@ -62,6 +62,10 @@ export interface Climber {
   /** 失衡持续时间（秒），超阈值触发强制脱手 */
   imbalanceT: number;
   fallen: boolean;
+  /** 当前被玩家拖动的肢端（其 freePos 由输入控制，物理不自动摆放） */
+  draggingLimb: Limb | null;
+  /** 发力/锁臂混合 0..1：0=休息直臂悬挂，1=移动中屈臂锁定上拉 */
+  pullBlend: number;
 }
 
 /** 由 Climber 构造姿态解算所需的朝向对象 */
@@ -106,6 +110,8 @@ function solvePelvis(c: Climber, dt: number, t: Tuning) {
   const up = rotate({ x: 0, y: -1 }, c.lean); // 攀爬向上
   const down = scale(up, -1); // 沿墙向下（重力）
   const torsoDown = scale(up, -c.body.torsoLen); // 肩→骨盆 偏移
+  // 发力锁臂：移动中(pullBlend↑)肩更靠近手→支撑臂屈起锁定、骨盆被上拉(带动重心)
+  const hangF = t.hangFrac + (t.pullHang - t.hangFrac) * c.pullBlend;
 
   // 全部肢端共同决定骨盆目标：抓住=权重1；自由(正在伸手)=权重 reachLead，
   // 让身体"跟着伸手一起动"（联动/重心跟随），而不是只有那条胳膊在伸。
@@ -121,7 +127,7 @@ function solvePelvis(c: Climber, dt: number, t: Tuning) {
     const pos = attached ? st.hold!.pos : st.freePos;
     let contrib: Vec2;
     if (isHand(l)) {
-      const shoulderTgt = add(pos, scale(down, armReach(c.body) * t.hangFrac));
+      const shoulderTgt = add(pos, scale(down, armReach(c.body) * hangF));
       contrib = add(shoulderTgt, torsoDown);
     } else {
       contrib = add(pos, scale(up, legReach(c.body) * t.standFrac));
@@ -185,6 +191,58 @@ function solveOrientation(c: Climber, dt: number, t: Tuning) {
   c.lean += (leanTgt - c.lean) * k;
 }
 
+/** 发力/锁臂混合：有手离点(正在伸够移动)→趋向锁臂上拉；落定休息→趋向直臂悬挂。 */
+function updatePullBlend(c: Climber, dt: number) {
+  const moving = !c.limbs.LH.attached || !c.limbs.RH.attached;
+  const target = moving ? 1 : 0;
+  const k = 1 - Math.pow(1 - 0.1, dt * 60);
+  c.pullBlend += (target - c.pullBlend) * k;
+}
+
+/**
+ * 自由肢端（非玩家拖动者）柔和趋向自然姿态：
+ *  - 脚：flag 摆腿——向一侧斜下甩出做配重，而非僵直下垂。
+ *  - 手：放松微屈悬于身侧，柔和回位（够不到松手不会突然下垂、生硬）。
+ * 帧率无关缓动(~0.25s) → 自然不突兀。注：自由肢端不计入支撑/重心，纯姿态。
+ */
+function solveFreeLimbs(c: Climber, dt: number) {
+  const pose = c.pose;
+  if (!pose) return;
+  const up = rotate({ x: 0, y: -1 }, c.lean);
+  const down = scale(up, -1);
+  const right = { x: -up.y, y: up.x };
+  const att = attachedLimbs(c);
+  let supX = c.pelvis.x;
+  if (att.length > 0) {
+    supX = 0;
+    for (const l of att) supX += c.limbs[l].hold!.pos.x;
+    supX /= att.length;
+  }
+  const k = 1 - Math.pow(1 - 0.1, dt * 60);
+  for (const l of LIMBS) {
+    const st = c.limbs[l];
+    if (st.attached || l === c.draggingLimb) continue;
+    const root = pose.limb[l].root;
+    let tgt: Vec2;
+    if (isHand(l)) {
+      // 放松微屈，悬于身侧、略收向身体中线
+      tgt = add(
+        root,
+        add(scale(down, armReach(c.body) * 0.5), scale(right, (c.pelvis.x - root.x) * 0.15)),
+      );
+    } else {
+      // flag 摆腿：向一侧斜下甩出（远离支撑质心的一侧，做出明显的配重摆腿）
+      const d = root.x - supX;
+      const side = Math.abs(d) < 6 ? (l === "LF" ? -1 : 1) : Math.sign(d);
+      tgt = add(
+        root,
+        add(scale(down, legReach(c.body) * 0.66), scale(right, side * legReach(c.body) * 0.5)),
+      );
+    }
+    st.freePos = add(st.freePos, scale(sub(tgt, st.freePos), k));
+  }
+}
+
 /** 双手受力方向水平相反时的张力需求（夹在两个侧向点之间需主动对抗）。 */
 function handTension(c: Climber, l: Limb, loadAngle: number): number {
   if (!isHand(l)) return 0;
@@ -228,7 +286,9 @@ export function stepClimber(
   const Fpara = c.body.weight * para; // 沿墙下滑总力
   const Fperp = c.body.weight * perp; // 垂墙（拉离/压入）总力
 
-  // 1+ 骨盆跟随 & 身体朝向 & 姿态
+  // 1+ 发力混合 → 自由肢端摆放 → 骨盆跟随 → 身体朝向 → 姿态
+  updatePullBlend(c, dt);
+  solveFreeLimbs(c, dt);
   solvePelvis(c, dt, t);
   solveOrientation(c, dt, t);
   c.pose = resolvePose(c.body, c.pelvis, oriOf(c), targetsOf(c));
@@ -307,12 +367,12 @@ export function stepClimber(
 
     const overloaded = load > effMax * 1.6;
     if (overloaded || st.stamina <= 0) {
+      st.freePos = { ...hold.pos }; // 从原位脱离，由 solveFreeLimbs 柔和摆出，不突跳
       st.attached = false;
       st.hold = null;
       st.grip = null;
       st.slipping = true;
       st.align = 1;
-      st.freePos = limbTargetFallback(c, l);
       res.slipped.push(l);
     }
   }
@@ -325,12 +385,12 @@ export function stepClimber(
         c.limbs[a].stamina <= c.limbs[b].stamina ? a : b,
       );
       const st = c.limbs[weakest];
+      st.freePos = { ...st.hold!.pos };
       st.attached = false;
       st.hold = null;
       st.grip = null;
       st.slipping = true;
       st.align = 1;
-      st.freePos = limbTargetFallback(c, weakest);
       res.slipped.push(weakest);
       c.imbalanceT = 0;
     }
@@ -353,23 +413,6 @@ export function stepClimber(
 
   c.pose = resolvePose(c.body, c.pelvis, oriOf(c), targetsOf(c));
   return res;
-}
-
-/**
- * 自由肢端的自然悬挂位置：从根关节沿重力方向下垂至近满伸展。
- * 脚下垂≈直腿(0.9)，手垂手略屈(0.62) → 自由腿不会过弯、手自然垂放。
- */
-export function naturalDangle(c: Climber, l: Limb): Vec2 {
-  const pose = c.pose ?? resolvePose(c.body, c.pelvis, oriOf(c), targetsOf(c));
-  const root = pose.limb[l].root;
-  const downDir = rotate({ x: 0, y: 1 }, c.lean);
-  const frac = isHand(l) ? 0.62 : 0.9;
-  return add(root, scale(downDir, maxReachOf(c.body, l) * frac));
-}
-
-/** 脱手后把手回到自然悬挂位置 */
-function limbTargetFallback(c: Climber, l: Limb): Vec2 {
-  return naturalDangle(c, l);
 }
 
 /**
