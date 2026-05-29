@@ -32,6 +32,7 @@ import {
   attachedLimbs,
 } from "./physics.ts";
 import { LevelDef } from "../level/levelSchema.ts";
+import { LEVELS } from "../level/levels.ts";
 import { tuning } from "../../config/tuning.ts";
 
 export type Status = "climbing" | "ring" | "won" | "fallen";
@@ -79,8 +80,24 @@ export class Game {
   onContact?: () => void;
   onGrab?: (match: number) => void;
 
+  levelIndex = 0;
+
   constructor(level: LevelDef) {
+    this.levelIndex = Math.max(0, LEVELS.indexOf(level));
     this.load(level);
+  }
+
+  /** 切到下一条线路（退出按钮 / 调试用） */
+  cycleLevel() {
+    this.levelIndex = (this.levelIndex + 1) % LEVELS.length;
+    this.load(LEVELS[this.levelIndex]);
+  }
+
+  /** 加载指定序号线路（键盘 1-9） */
+  loadIndex(i: number) {
+    if (i < 0 || i >= LEVELS.length) return;
+    this.levelIndex = i;
+    this.load(LEVELS[i]);
   }
 
   load(level: LevelDef) {

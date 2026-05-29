@@ -1,7 +1,7 @@
 // 引导：canvas / 60Hz 循环 / 串起 input → core → render。
 
 import { Game } from "./core/sim/gameState.ts";
-import { LEVEL_THREP } from "./core/level/levels.ts";
+import { LEVELS } from "./core/level/levels.ts";
 import { Camera } from "./render/camera.ts";
 import { drawWall } from "./render/drawWall.ts";
 import { drawHolds } from "./render/drawHolds.ts";
@@ -18,7 +18,7 @@ import { sfx } from "./audio/sfx.ts";
 
 const canvas = document.getElementById("game") as HTMLCanvasElement;
 const ctx = canvas.getContext("2d")!;
-const game = new Game(LEVEL_THREP);
+const game = new Game(LEVELS[0]);
 const cam = new Camera(1, 1, game.level);
 const smoother = new PoseSmoother();
 let hud: HudHit | null = null;
@@ -58,6 +58,12 @@ game.onWin = () => {
   burstWin(s.x, s.y);
   sfx.win();
 };
+
+// 键盘 1-9 切换线路（⤴ 按钮也可循环切换）
+window.addEventListener("keydown", (e) => {
+  const n = parseInt(e.key, 10);
+  if (!Number.isNaN(n) && n >= 1) game.loadIndex(n - 1);
+});
 
 // 开发调试钩子（便于运行时检查状态，不影响玩法）
 (window as unknown as { __game: Game }).__game = game;

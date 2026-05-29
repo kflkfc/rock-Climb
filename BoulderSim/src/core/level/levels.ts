@@ -48,4 +48,29 @@ export const LEVEL_THREP: LevelDef = {
   ],
 };
 
-export const LEVELS: LevelDef[] = [LEVEL_THREP];
+/**
+ * 把一条线路水平"剪切"成斜上线路：越往上(y 越小)整体越往一侧偏移。
+ * 因为剪切保持了相邻岩点的纵向间距与相对几何，可解性与原竖线一致，
+ * 只是身体需要一路斜向移动 + 偏身/配重/flag —— 正好检验这些系统。
+ * k>0 → 斜向右上；k<0 → 斜向左上。
+ */
+const SHEAR_REF = 850; // 参考底线 y（起手脚附近），此处偏移为 0
+function shearRoute(
+  base: LevelDef,
+  opts: { id: string; name: string; grade?: string; k: number },
+): LevelDef {
+  return {
+    ...base,
+    id: opts.id,
+    name: opts.name,
+    grade: opts.grade ?? base.grade,
+    holds: base.holds.map((h) => ({ ...h, x: Math.round(h.x + (SHEAR_REF - h.y) * opts.k) })),
+  };
+}
+
+/** 斜向右上 */
+export const LEVEL_SKA_R = shearRoute(LEVEL_THREP, { id: "ska_r", name: "SKÁ →", grade: "V1", k: 0.24 });
+/** 斜向左上 */
+export const LEVEL_SKA_L = shearRoute(LEVEL_THREP, { id: "ska_l", name: "SKÁ ←", grade: "V1", k: -0.24 });
+
+export const LEVELS: LevelDef[] = [LEVEL_THREP, LEVEL_SKA_R, LEVEL_SKA_L];
