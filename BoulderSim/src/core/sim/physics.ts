@@ -120,9 +120,10 @@ function solvePelvis(c: Climber, dt: number, t: Tuning) {
   for (const l of LIMBS) {
     const st = c.limbs[l];
     const attached = st.attached && st.hold;
-    // 偏向"挂在直臂上"：手权重高(肩远离手→手臂打直、省力悬挂)，脚权重略低
-    // (腿屈伸自适应、不与直臂冲突)。自由(伸手)肢端用 reachLead 让身体跟随。
-    const w = attached ? (isHand(l) ? 0.85 : 0.8) : t.reachLead;
+    const fullW = isHand(l) ? 0.85 : 0.8;
+    // 权重：抓住=full；正在拖动的肢端也用 full（身体按"抓住后"的位置预先就位，
+    // 松手抓住瞬间目标不变 → 没有突然调整姿态）；其它自由肢端用 reachLead。
+    const w = attached || l === c.draggingLimb ? fullW : t.reachLead;
     if (w <= 0) continue;
     const pos = attached ? st.hold!.pos : st.freePos;
     let contrib: Vec2;
@@ -144,12 +145,15 @@ function solvePelvis(c: Climber, dt: number, t: Tuning) {
 
   // 两/三点平衡(counterbalance)：抬肢减少支撑时，重心(骨盆 X)主动移到剩余支撑点上方，
   // 读出"靠剩余两三点平衡、再发力移动"，而非四点死贴墙。抬得越多移得越果断。
-  const sup = attachedLimbs(c);
-  if (sup.length >= 1 && sup.length < 4) {
-    let cx = 0;
-    for (const l of sup) cx += c.limbs[l].hold!.pos.x;
-    cx /= sup.length;
-    const strength = Math.min(0.9, (4 - sup.length) * t.balanceShift);
+  // 把"正在拖动"的肢端按其目标位也算作支撑点 → 抓住瞬间支撑集合不变、重心目标连续。
+  const supX: number[] = [];
+  for (const l of LIMBS) {
+    if (c.limbs[l].attached && c.limbs[l].hold) supX.push(c.limbs[l].hold!.pos.x);
+    else if (l === c.draggingLimb) supX.push(c.limbs[l].freePos.x);
+  }
+  if (supX.length >= 1 && supX.length < 4) {
+    const cx = supX.reduce((a, b) => a + b, 0) / supX.length;
+    const strength = Math.min(0.9, (4 - supX.length) * t.balanceShift);
     const kb = 1 - Math.pow(1 - strength, dt * 60);
     c.pelvis.x += (cx - c.pelvis.x) * kb;
   }
