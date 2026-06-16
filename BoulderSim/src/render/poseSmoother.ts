@@ -34,7 +34,11 @@ export class PoseSmoother {
     const aLimb = 1 - Math.exp(-dt / Math.max(0.02, tuning.limbTau));
     const aPelvis = 1 - Math.exp(-dt / Math.max(0.02, tuning.limbTau * 1.4));
     this.pelvis = lerp(this.pelvis, tgtPelvis, aPelvis);
-    for (const l of LIMBS) this.ends[l] = lerp(this.ends[l], tgtEnds[l], aLimb);
+    for (const l of LIMBS) {
+      // 正被玩家拖动的肢端：直接跟手（无平滑滞后），避免松手抓住瞬间"追赶滞后"突跳
+      if (l === game.c.draggingLimb) this.ends[l] = { ...tgtEnds[l] };
+      else this.ends[l] = lerp(this.ends[l], tgtEnds[l], aLimb);
+    }
 
     // 朝向（lean/twist）已在物理中逐帧缓动，直接透传
     return resolvePose(game.c.body, this.pelvis, oriOf(game.c), this.ends);
