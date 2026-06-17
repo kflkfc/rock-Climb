@@ -89,7 +89,7 @@ function tick(dt: number) {
   drawHolds(ctx, cam, game);
   drawReach(ctx, cam, game);
 
-  drawCharacter(ctx, cam, pose);
+  drawCharacter(ctx, cam, pose, game);
   drawStaminaRings(ctx, cam, game, pose);
   drawEffects(ctx, cam, game);
   drawGripRing(ctx, cam, game);
