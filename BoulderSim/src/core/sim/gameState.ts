@@ -19,6 +19,7 @@ import {
   LIMBS,
   isHand,
   resolvePose,
+  desiredBend,
   maxReachOf,
   Pose,
 } from "../model/skeleton.ts";
@@ -140,6 +141,13 @@ export class Game {
       (limbs.LH.hold!.pos.y + limbs.LF.hold!.pos.y) / 2,
     );
     const ori = { lean, shoulderTwist: 0, hipTwist: 0 };
+    const startTargets = {
+      LH: limbs.LH.hold!.pos,
+      RH: limbs.RH.hold!.pos,
+      LF: limbs.LF.hold!.pos,
+      RF: limbs.RF.hold!.pos,
+    };
+    const bend = desiredBend({ ...ADULT }, pelvis, ori, startTargets);
     this.c = {
       body: { ...ADULT },
       pelvis,
@@ -147,16 +155,12 @@ export class Game {
       shoulderTwist: 0,
       hipTwist: 0,
       limbs,
-      pose: resolvePose({ ...ADULT }, pelvis, ori, {
-        LH: limbs.LH.hold!.pos,
-        RH: limbs.RH.hold!.pos,
-        LF: limbs.LF.hold!.pos,
-        RF: limbs.RF.hold!.pos,
-      }),
+      pose: resolvePose({ ...ADULT }, pelvis, ori, startTargets, bend),
       imbalanceT: 0,
       fallen: false,
       draggingLimb: null,
       pullBlend: 0,
+      bend,
     };
     this.status = "climbing";
     this.gripCount = 0;

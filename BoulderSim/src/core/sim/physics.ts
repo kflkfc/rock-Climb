@@ -27,6 +27,7 @@ import {
   LIMBS,
   isHand,
   resolvePose,
+  desiredBend,
   maxReachOf,
   armReach,
   legReach,
@@ -66,6 +67,8 @@ export interface Climber {
   draggingLimb: Limb | null;
   /** 发力/锁臂混合 0..1：0=休息直臂悬挂，1=移动中屈臂锁定上拉 */
   pullBlend: number;
+  /** 各肢端连续弯曲量 ∈[-1,1]（逐帧缓动到目标符号 → 关节平滑换侧不突变） */
+  bend: Record<Limb, number>;
 }
 
 /** 由 Climber 构造姿态解算所需的朝向对象 */
@@ -160,7 +163,7 @@ function solvePelvis(c: Climber, dt: number, t: Tuning) {
 
   // 硬钳制：任何抓住肢端都不得超过最大伸展（设计文档：手≤臂长 / 脚≤腿长）
   for (let kk = 0; kk < 4; kk++) {
-    const pose = resolvePose(c.body, c.pelvis, oriOf(c), targetsOf(c));
+    const pose = resolvePose(c.body, c.pelvis, oriOf(c), targetsOf(c), c.bend);
     let corr = v(0, 0);
     let n = 0;
     for (const l of attachedLimbs(c)) {
@@ -187,12 +190,43 @@ function solveOrientation(c: Climber, dt: number, t: Tuning) {
   const lim = t.rotLimit;
   const shoulderTgt = clamp(Math.atan2(tg.RH.y - tg.LH.y, tg.RH.x - tg.LH.x), -lim, lim);
   const hipTgt = clamp(Math.atan2(tg.RF.y - tg.LF.y, tg.RF.x - tg.LF.x), -lim, lim);
-  const avgHandX = (tg.LH.x + tg.RH.x) / 2;
-  const leanTgt = clamp((avgHandX - c.pelvis.x) / c.body.torsoLen, -1, 1) * lim;
+
+  // 脊柱方向 = 支撑脚质心 → 支撑手质心（脚→头）。可大幅倾斜，乃至双脚在上的倒挂。
+  const hands = LIMBS.filter((l) => isHand(l) && c.limbs[l].attached && c.limbs[l].hold);
+  const feet = LIMBS.filter((l) => !isHand(l) && c.limbs[l].attached && c.limbs[l].hold);
+  let leanTgt = c.lean;
+  if (hands.length > 0 && feet.length > 0) {
+    const cen = (ls: Limb[]) => {
+      let x = 0;
+      let y = 0;
+      for (const l of ls) {
+        x += c.limbs[l].hold!.pos.x;
+        y += c.limbs[l].hold!.pos.y;
+      }
+      return { x: x / ls.length, y: y / ls.length };
+    };
+    const hc = cen(hands);
+    const fc = cen(feet);
+    const ux = hc.x - fc.x;
+    const uy = hc.y - fc.y;
+    if (Math.hypot(ux, uy) > 1e-3) leanTgt = Math.atan2(ux, -uy); // rotate(UP,leanTgt)≈脚→手方向
+  }
+
   const k = 1 - Math.pow(1 - t.rotFollow, dt * 60);
   c.shoulderTwist += (shoulderTgt - c.shoulderTwist) * k;
   c.hipTwist += (hipTgt - c.hipTwist) * k;
-  c.lean += (leanTgt - c.lean) * k;
+  // lean 取最短角差缓动（允许大角度/倒置，过零不抖）
+  let dl = leanTgt - c.lean;
+  while (dl > Math.PI) dl -= Math.PI * 2;
+  while (dl < -Math.PI) dl += Math.PI * 2;
+  c.lean += dl * k;
+}
+
+/** 各肢端连续弯曲量缓动到几何期望符号 → 肘/膝换侧"经过伸直"平滑旋转，不突变。 */
+function updateBend(c: Climber, dt: number) {
+  const tgt = desiredBend(c.body, c.pelvis, oriOf(c), targetsOf(c));
+  const k = 1 - Math.pow(1 - 0.14, dt * 60); // ~0.1s 旋转过渡
+  for (const l of LIMBS) c.bend[l] += (tgt[l] - c.bend[l]) * k;
 }
 
 /** 发力/锁臂混合：有手离点(正在伸够移动)→趋向锁臂上拉；落定休息→趋向直臂悬挂。 */
@@ -281,7 +315,7 @@ export function stepClimber(
   const res: StepResult = { slipped: [], fell: false, balanced: true, comInside: true };
   for (const l of LIMBS) c.limbs[l].slipping = false;
   if (c.fallen) {
-    c.pose = resolvePose(c.body, c.pelvis, oriOf(c), targetsOf(c));
+    c.pose = resolvePose(c.body, c.pelvis, oriOf(c), targetsOf(c), c.bend);
     return res;
   }
 
@@ -290,12 +324,13 @@ export function stepClimber(
   const Fpara = c.body.weight * para; // 沿墙下滑总力
   const Fperp = c.body.weight * perp; // 垂墙（拉离/压入）总力
 
-  // 1+ 发力混合 → 自由肢端摆放 → 骨盆跟随 → 身体朝向 → 姿态
+  // 1+ 发力混合 → 自由肢端摆放 → 骨盆跟随 → 身体朝向 → 关节弯曲 → 姿态
   updatePullBlend(c, dt);
   solveFreeLimbs(c, dt);
   solvePelvis(c, dt, t);
   solveOrientation(c, dt, t);
-  c.pose = resolvePose(c.body, c.pelvis, oriOf(c), targetsOf(c));
+  updateBend(c, dt);
+  c.pose = resolvePose(c.body, c.pelvis, oriOf(c), targetsOf(c), c.bend);
 
   const att = attachedLimbs(c);
 
@@ -415,7 +450,7 @@ export function stepClimber(
     res.fell = true;
   }
 
-  c.pose = resolvePose(c.body, c.pelvis, oriOf(c), targetsOf(c));
+  c.pose = resolvePose(c.body, c.pelvis, oriOf(c), targetsOf(c), c.bend);
   return res;
 }
 

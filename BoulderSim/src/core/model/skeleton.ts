@@ -46,20 +46,66 @@ export function maxReachOf(b: BodyParams, l: Limb): number {
   return l === "LH" || l === "RH" ? armReach(b) : legReach(b);
 }
 
+// 各肢端在身体坐标系里的"期望弯曲侧"方向（肘向下外、膝向外略下）。
+function bendWant(l: Limb, up: Vec2, right: Vec2): Vec2 {
+  const down = scale(up, -1);
+  if (l === "LH") return norm(add(down, scale(right, -0.6)));
+  if (l === "RH") return norm(add(down, scale(right, 0.6)));
+  if (l === "LF") return norm(add(scale(right, -1), scale(down, 0.35)));
+  return norm(add(scale(right, 1), scale(down, 0.35)));
+}
+
+/**
+ * 计算各肢端"期望弯曲方向符号"(±1)，由根→末端弦的法向与期望侧点积决定。
+ * 物理层据此把连续 bend 值平滑缓动到目标符号 → 关节换侧平滑、不突变。
+ */
+export function desiredBend(
+  b: BodyParams,
+  pelvis: Vec2,
+  ori: Orientation,
+  targets: Record<Limb, Vec2>,
+): Record<Limb, number> {
+  const up = rotate(UP, ori.lean);
+  const right = { x: -up.y, y: up.x };
+  const roots = limbRoots(b, pelvis, ori, up, right);
+  const sgn = (root: Vec2, target: Vec2, want: Vec2): number => {
+    const d = norm(sub(target, root));
+    const perp = { x: -d.y, y: d.x };
+    return dot(perp, want) >= 0 ? 1 : -1;
+  };
+  const out = {} as Record<Limb, number>;
+  for (const l of LIMBS) out[l] = sgn(roots[l], targets[l], bendWant(l, up, right));
+  return out;
+}
+
+function limbRoots(b: BodyParams, pelvis: Vec2, ori: Orientation, up: Vec2, right: Vec2) {
+  const shoulderRight = rotate(right, ori.shoulderTwist);
+  const hipRight = rotate(right, ori.hipTwist);
+  const shoulderC = add(pelvis, scale(up, b.torsoLen));
+  return {
+    LH: add(shoulderC, scale(shoulderRight, -b.shoulderWidth / 2)),
+    RH: add(shoulderC, scale(shoulderRight, b.shoulderWidth / 2)),
+    LF: add(pelvis, scale(hipRight, -b.hipWidth / 2)),
+    RF: add(pelvis, scale(hipRight, b.hipWidth / 2)),
+  } as Record<Limb, Vec2>;
+}
+
 /**
  * 解算姿态。targets: 各肢端末端世界坐标（被抓住的肢端=岩点位置；自由肢端=把手当前位置）。
- * ori: 身体朝向（脊柱倾斜 + 肩/髋独立旋转）。
+ * ori: 身体朝向（脊柱倾斜 + 肩/髋独立旋转；lean 可大角度乃至倒挂）。
+ * bend: 各肢端连续弯曲量 ∈[-1,1]（物理层逐帧缓动，保证关节平滑换侧）。
  */
 export function resolvePose(
   b: BodyParams,
   pelvis: Vec2,
   ori: Orientation,
   targets: Record<Limb, Vec2>,
+  bend: Record<Limb, number>,
 ): Pose {
-  const up = rotate(UP, ori.lean); // 脊柱方向（偏身）
-  const right = { x: -up.y, y: up.x }; // 基准右方向
-  const shoulderRight = rotate(right, ori.shoulderTwist); // 肩线（可绕脊柱扭转）
-  const hipRight = rotate(right, ori.hipTwist); // 髋线（可独立扭转）
+  const up = rotate(UP, ori.lean); // 脊柱方向（可大幅倾斜/倒置）
+  const right = { x: -up.y, y: up.x };
+  const shoulderRight = rotate(right, ori.shoulderTwist);
+  const hipRight = rotate(right, ori.hipTwist);
 
   const hipL = add(pelvis, scale(hipRight, -b.hipWidth / 2));
   const hipR = add(pelvis, scale(hipRight, b.hipWidth / 2));
@@ -69,37 +115,11 @@ export function resolvePose(
   const neck = add(shoulderC, scale(up, b.neckLen));
   const head = add(neck, scale(up, b.headR));
 
-  // 解剖学正确的弯曲方向：肘"向下且外"，膝"向外为主、略向下"（攀岩蛙形）。
-  // 由目标相对根关节的弦方向动态选 bendSign，杜绝反关节，且随姿态连续变化。
-  const down = scale(up, -1);
-  const out = (sign: number) => norm(add(down, scale(right, sign))); // 肘期望侧
-  const knee = (sign: number) => norm(add(scale(right, sign * 1), scale(down, 0.35))); // 膝期望侧
-  const bend = (root: Vec2, target: Vec2, want: Vec2): number => {
-    const d = norm(sub(target, root));
-    const perp = { x: -d.y, y: d.x }; // 与 ik.ts 内 perp 一致
-    return dot(perp, want) >= 0 ? 1 : -1;
-  };
   const limb = {
-    LH: {
-      root: shoulderL,
-      ik: solve2Bone(shoulderL, targets.LH, b.upperArm, b.foreArm,
-        bend(shoulderL, targets.LH, out(-0.6))),
-    },
-    RH: {
-      root: shoulderR,
-      ik: solve2Bone(shoulderR, targets.RH, b.upperArm, b.foreArm,
-        bend(shoulderR, targets.RH, out(0.6))),
-    },
-    LF: {
-      root: hipL,
-      ik: solve2Bone(hipL, targets.LF, b.thigh, b.shank,
-        bend(hipL, targets.LF, knee(-1))),
-    },
-    RF: {
-      root: hipR,
-      ik: solve2Bone(hipR, targets.RF, b.thigh, b.shank,
-        bend(hipR, targets.RF, knee(1))),
-    },
+    LH: { root: shoulderL, ik: solve2Bone(shoulderL, targets.LH, b.upperArm, b.foreArm, bend.LH) },
+    RH: { root: shoulderR, ik: solve2Bone(shoulderR, targets.RH, b.upperArm, b.foreArm, bend.RH) },
+    LF: { root: hipL, ik: solve2Bone(hipL, targets.LF, b.thigh, b.shank, bend.LF) },
+    RF: { root: hipR, ik: solve2Bone(hipR, targets.RF, b.thigh, b.shank, bend.RF) },
   } as Pose["limb"];
 
   const com = { x: (pelvis.x + shoulderC.x) / 2, y: (pelvis.y + shoulderC.y) / 2 };

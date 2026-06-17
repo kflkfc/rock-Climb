@@ -1,6 +1,7 @@
 // 纯逻辑 · 解析法 2-骨 IK（手臂 = 上臂+前臂；腿 = 大腿+小腿）。
 // 给定根关节 root、目标 target、两段骨长 l1/l2，解出中间关节 (肘/膝) 位置。
-// bendSign 决定弯曲方向（+1 / -1），用于让左右肢、手脚自然反向弯。
+// bend 为连续弯曲量 ∈ [-1,1]：±1=完整弯向某侧；0=伸直在连线上。
+// 连续取值让肘/膝换侧时"经过伸直"平滑旋转过去（而非瞬间翻面），消除关节突变。
 
 import { Vec2, dist, norm, scale, add, sub, clamp } from "./vec2.ts";
 
@@ -15,7 +16,7 @@ export function solve2Bone(
   target: Vec2,
   l1: number,
   l2: number,
-  bendSign: number,
+  bend: number,
 ): IkSolution {
   const maxReach = l1 + l2;
   const minReach = Math.abs(l1 - l2);
@@ -46,7 +47,9 @@ export function solve2Bone(
     along = Math.sqrt(Math.max(0, l1 * l1 - h * h));
   }
   const perp = { x: -dir.y, y: dir.x }; // 法向
-  const joint = add(add(root, scale(dir, along)), scale(perp, h * bendSign));
+  // 连续弯曲：|bend|<1 时关节趋向连线（换侧途中短暂缩腿/直臂，平滑过渡）
+  const b = clamp(bend, -1, 1);
+  const joint = add(add(root, scale(dir, along)), scale(perp, h * b));
 
   return { joint, end: endTarget, reached };
 }

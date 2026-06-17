@@ -40,8 +40,8 @@ export class PoseSmoother {
       else this.ends[l] = lerp(this.ends[l], tgtEnds[l], aLimb);
     }
 
-    // 朝向（lean/twist）已在物理中逐帧缓动，直接透传
-    return resolvePose(game.c.body, this.pelvis, oriOf(game.c), this.ends);
+    // 朝向(lean/twist)、关节弯曲(bend) 已在物理中逐帧缓动，直接透传
+    return resolvePose(game.c.body, this.pelvis, oriOf(game.c), this.ends, game.c.bend);
   }
 
   reset() {
