@@ -2,7 +2,7 @@
 // 名字沿用 Klifur 冰岛语风格：ÞREP（台阶）。起手 4 个大水罐，向上以 Jug 为主，
 // 穿插 1 Crimp / 1 Pinch / 1 Sloper 让 4 种岩点都出现，顶部彩虹终点。
 
-import { LevelDef } from "./levelSchema.ts";
+import { LevelDef, HoldDef } from "./levelSchema.ts";
 
 const WORLD_W = 720; // 加宽攀岩墙（摄像机固定缩放 + 横向滚动）
 
@@ -92,4 +92,42 @@ export const LEVEL_THAK = shearRoute(LEVEL_THREP, {
   wallAngleDeg: 135,
 });
 
-export const LEVELS: LevelDef[] = [LEVEL_THREP, LEVEL_SKA_R, LEVEL_SKA_L, LEVEL_THAK];
+/**
+ * 屋檐倒挂横移线 HVOLF（170° 近屋檐）：脚踩上排、手抓下排 → 身体头下脚上倒挂，
+ * 沿屋檐底向右横移（小步 shuffle，不跨过另一肢）。重力近乎垂直墙面，手承重为主。
+ */
+const HVOLF_HX = [300, 370, 440, 510, 580, 650]; // 列
+function hvolfHolds(): HoldDef[] {
+  const hs: HoldDef[] = [];
+  // 起手：左肢在列0、右肢在列1（脚上排 y300 / 手下排 y420 → 倒挂）
+  hs.push({ id: "s_lf", type: "jug", x: HVOLF_HX[0], y: 300, start: "LF" });
+  hs.push({ id: "s_rf", type: "jug", x: HVOLF_HX[1], y: 300, start: "RF" });
+  hs.push({ id: "s_lh", type: "jug", x: HVOLF_HX[0], y: 420, start: "LH" });
+  hs.push({ id: "s_rh", type: "jug", x: HVOLF_HX[1], y: 420, start: "RH" });
+  // 其余列：每列一个脚点(上)一个手点(下)
+  for (let i = 2; i < HVOLF_HX.length; i++) {
+    hs.push({ id: `f${i}`, type: "jug", x: HVOLF_HX[i], y: 300 });
+    const goal = i === HVOLF_HX.length - 1;
+    hs.push({ id: goal ? "goal" : `h${i}`, type: "jug", x: HVOLF_HX[i], y: 420, radius: goal ? 24 : undefined, goal });
+  }
+  return hs;
+}
+export const LEVEL_HVOLF: LevelDef = {
+  id: "hvolf",
+  name: "HVOLF ∩",
+  grade: "V5",
+  wallAngleDeg: 170,
+  worldWidth: WORLD_W,
+  worldHeight: 1000,
+  goalHoldId: "goal",
+  starThreshold: 10,
+  holds: hvolfHolds(),
+};
+
+export const LEVELS: LevelDef[] = [
+  LEVEL_THREP,
+  LEVEL_SKA_R,
+  LEVEL_SKA_L,
+  LEVEL_THAK,
+  LEVEL_HVOLF,
+];

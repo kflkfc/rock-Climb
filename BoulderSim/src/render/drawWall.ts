@@ -21,10 +21,11 @@ function grainTile(): HTMLCanvasElement {
   return cv;
 }
 
-/** 墙角 → HSL 亮度（板墙亮 85% → 屋檐暗 35%）。直壁 90° ≈ 中性。 */
+/** 墙角 → HSL 亮度（板墙亮 84% → 屋檐暗 50%）。直壁 90° ≈ 中性。
+ *  屋檐不至于过暗看不清，仍保留"越倒攀越暗"的层次。 */
 function wallLightness(angleDeg: number): number {
   const t = (angleDeg - 60) / (180 - 60); // 0..1
-  return 85 - t * 50;
+  return 84 - t * 34;
 }
 
 export function drawWall(ctx: CanvasRenderingContext2D, cam: Camera, angleDeg: number) {

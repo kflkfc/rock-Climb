@@ -191,25 +191,32 @@ function solveOrientation(c: Climber, dt: number, t: Tuning) {
   const shoulderTgt = clamp(Math.atan2(tg.RH.y - tg.LH.y, tg.RH.x - tg.LH.x), -lim, lim);
   const hipTgt = clamp(Math.atan2(tg.RF.y - tg.LF.y, tg.RF.x - tg.LF.x), -lim, lim);
 
-  // 脊柱方向 = 支撑脚质心 → 支撑手质心（脚→头）。可大幅倾斜，乃至双脚在上的倒挂。
+  // 脊柱方向（脚→头）由支撑几何决定，可大幅倾斜乃至倒挂：
+  //  - 手脚都抓：脊柱 = 支撑脚质心 → 支撑手质心
+  //  - 只用手(纯吊臂)：身体悬于手下方 → 脊柱朝上(lean→0)
+  //  - 只用脚(屋檐蝙蝠挂)：身体悬于脚下方、头朝下 → 脊柱朝下(lean→π)
   const hands = LIMBS.filter((l) => isHand(l) && c.limbs[l].attached && c.limbs[l].hold);
   const feet = LIMBS.filter((l) => !isHand(l) && c.limbs[l].attached && c.limbs[l].hold);
+  const cen = (ls: Limb[]) => {
+    let x = 0;
+    let y = 0;
+    for (const l of ls) {
+      x += c.limbs[l].hold!.pos.x;
+      y += c.limbs[l].hold!.pos.y;
+    }
+    return { x: x / ls.length, y: y / ls.length };
+  };
   let leanTgt = c.lean;
   if (hands.length > 0 && feet.length > 0) {
-    const cen = (ls: Limb[]) => {
-      let x = 0;
-      let y = 0;
-      for (const l of ls) {
-        x += c.limbs[l].hold!.pos.x;
-        y += c.limbs[l].hold!.pos.y;
-      }
-      return { x: x / ls.length, y: y / ls.length };
-    };
     const hc = cen(hands);
     const fc = cen(feet);
     const ux = hc.x - fc.x;
     const uy = hc.y - fc.y;
     if (Math.hypot(ux, uy) > 1e-3) leanTgt = Math.atan2(ux, -uy); // rotate(UP,leanTgt)≈脚→手方向
+  } else if (hands.length > 0) {
+    leanTgt = 0; // 吊臂：直挂手下
+  } else if (feet.length > 0) {
+    leanTgt = Math.PI; // 蝙蝠挂：倒挂脚下（头朝下）
   }
 
   const k = 1 - Math.pow(1 - t.rotFollow, dt * 60);
@@ -355,12 +362,16 @@ export function stepClimber(
   }
 
   // 2 抓力上限 + 4 耐力 + 5 脱手
-  // 负载分配：手/脚比例随墙角变（直壁≈50/50，越仰手承重越多 → 对齐设计文档表）
-  const handFrac = 0.5 + 0.4 * perp; // 垂直 perp=0 →0.5；屋檐 perp≈1 →0.9
+  // 负载分配：手/脚比例随墙角变（直壁≈50/50，越仰手承重越多 → 对齐设计文档表）。
+  // 单类支撑（只手/只脚，如屋檐倒挂只用脚）时该类承担全部负载（归一化）。
   const handCount = att.filter(isHand).length;
   const footCount = att.length - handCount;
-  const wHand = handCount > 0 ? handFrac / handCount : 0;
-  const wFoot = footCount > 0 ? (1 - handFrac) / footCount : 0;
+  let hFrac = 0.5 + 0.4 * perp; // 垂直 0.5；屋檐 perp≈1 →0.9
+  let fFrac = 1 - hFrac;
+  if (handCount === 0) fFrac = 1; // 只用脚（蝙蝠挂）→ 脚承全部
+  if (footCount === 0) hFrac = 1; // 只用手（纯吊臂）→ 手承全部
+  const wHand = handCount > 0 ? hFrac / handCount : 0;
+  const wFoot = footCount > 0 ? fFrac / footCount : 0;
   const totalLoad = Fpara + Fperp * 0.6;
 
   const com = c.pose.com;
