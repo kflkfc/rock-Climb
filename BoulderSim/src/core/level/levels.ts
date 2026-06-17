@@ -4,12 +4,14 @@
 
 import { LevelDef } from "./levelSchema.ts";
 
-export const LEVEL_THREP: LevelDef = {
+const WORLD_W = 720; // 加宽攀岩墙（摄像机固定缩放 + 横向滚动）
+
+const THREP_BASE: LevelDef = {
   id: "threp",
   name: "ÞREP",
   grade: "V0",
   wallAngleDeg: 90,
-  worldWidth: 420,
+  worldWidth: WORLD_W,
   worldHeight: 1000,
   goalHoldId: "goal",
   starThreshold: 6,
@@ -54,16 +56,25 @@ export const LEVEL_THREP: LevelDef = {
  * 只是身体需要一路斜向移动 + 偏身/配重/flag —— 正好检验这些系统。
  * k>0 → 斜向右上；k<0 → 斜向左上。
  */
+/** 整体平移线路（用于把窄竖线居中到加宽的墙上）。 */
+function translateRoute(base: LevelDef, dx: number): LevelDef {
+  return { ...base, holds: base.holds.map((h) => ({ ...h, x: Math.round(h.x + dx) })) };
+}
+
+// ÞREP 原始 x≈150-280（中心~215），平移到加宽墙中心
+export const LEVEL_THREP = translateRoute(THREP_BASE, WORLD_W / 2 - 215);
+
 const SHEAR_REF = 850; // 参考底线 y（起手脚附近），此处偏移为 0
 function shearRoute(
   base: LevelDef,
-  opts: { id: string; name: string; grade?: string; k: number },
+  opts: { id: string; name: string; grade?: string; k: number; wallAngleDeg?: number },
 ): LevelDef {
   return {
     ...base,
     id: opts.id,
     name: opts.name,
     grade: opts.grade ?? base.grade,
+    wallAngleDeg: opts.wallAngleDeg ?? base.wallAngleDeg,
     holds: base.holds.map((h) => ({ ...h, x: Math.round(h.x + (SHEAR_REF - h.y) * opts.k) })),
   };
 }
@@ -72,5 +83,13 @@ function shearRoute(
 export const LEVEL_SKA_R = shearRoute(LEVEL_THREP, { id: "ska_r", name: "SKÁ →", grade: "V1", k: 0.24 });
 /** 斜向左上 */
 export const LEVEL_SKA_L = shearRoute(LEVEL_THREP, { id: "ska_l", name: "SKÁ ←", grade: "V1", k: -0.24 });
+/** 仰角斜线（135° 屋檐感）：更宽的斜向右上 + 手承重更多，身体大幅后仰 */
+export const LEVEL_THAK = shearRoute(LEVEL_THREP, {
+  id: "thak",
+  name: "ÞAK ⤢",
+  grade: "V3",
+  k: 0.3,
+  wallAngleDeg: 135,
+});
 
-export const LEVELS: LevelDef[] = [LEVEL_THREP, LEVEL_SKA_R, LEVEL_SKA_L];
+export const LEVELS: LevelDef[] = [LEVEL_THREP, LEVEL_SKA_R, LEVEL_SKA_L, LEVEL_THAK];

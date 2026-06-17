@@ -68,13 +68,21 @@ window.addEventListener("keydown", (e) => {
 // 开发调试钩子（便于运行时检查状态，不影响玩法）
 (window as unknown as { __game: Game }).__game = game;
 
+let lastLevelId = game.level.id;
+
 function tick(dt: number) {
   game.update(dt);
   updateEffects(dt);
 
+  // 切换线路时同步摄像机（关卡尺寸/边界可能不同）
+  if (game.level.id !== lastLevelId) {
+    lastLevelId = game.level.id;
+    cam.setLevel(game.level);
+  }
+
   // 平滑后的显示姿态（物理仍为逻辑瞬时；动作不再僵硬/突变）
   const pose = smoother.update(game, dt);
-  cam.follow(pose.com.y, dt);
+  cam.follow(pose.com.x, pose.com.y, dt);
 
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   drawWall(ctx, cam, game.level.wallAngleDeg);
