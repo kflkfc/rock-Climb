@@ -34,3 +34,29 @@ export const ADULT: BodyParams = {
   coreStability: 0.6,
   weight: 100,
 };
+
+export const MAX_LEVEL = 10;
+
+/**
+ * 选手级别 → 人体能力（对齐 PRD 成长表）。
+ *  1 级新手：指力弱、核心差，单手吊不住、易掉；
+ *  5 级老手：能稳定攀爬、偶尔单手；
+ *  10 级世界杯：指力满、核心极稳，可单手悬挂/引体、几乎不掉。
+ * 仅缩放能力参数，骨骼尺寸不变。
+ */
+export function bodyForLevel(level: number): BodyParams {
+  const t = Math.max(0, Math.min(1, (level - 1) / (MAX_LEVEL - 1))); // 0..1
+  return {
+    ...ADULT,
+    fingerStrength: 0.34 + 0.66 * t, // L1 0.34 → L10 1.0
+    coreStability: 0.28 + 0.67 * t, // L1 0.28 → L10 0.95
+  };
+}
+
+export const LEVEL_LABEL: Record<number, string> = {
+  1: "新手",
+  3: "进阶",
+  5: "老手",
+  7: "高手",
+  10: "世界杯",
+};

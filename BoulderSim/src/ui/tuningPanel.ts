@@ -2,12 +2,33 @@
 
 import { tuning, TUNE_SPECS } from "../config/tuning.ts";
 import { sfx } from "../audio/sfx.ts";
+import { Game } from "../core/sim/gameState.ts";
+import { LEVEL_LABEL } from "../core/model/body.ts";
 
-export function installTuningPanel() {
+export function installTuningPanel(game: Game) {
   const root = document.getElementById("tuning")!;
   const rows = root.querySelector(".rows") as HTMLElement;
   const title = document.getElementById("tuningTitle")!;
   title.addEventListener("click", () => root.classList.toggle("collapsed"));
+
+  // 选手级别 1-10（新手→世界杯）
+  const lvLabel = document.createElement("label");
+  const lvName = document.createElement("span");
+  const lvText = (n: number) => `🧗 级别 ${n}${LEVEL_LABEL[n] ? "·" + LEVEL_LABEL[n] : ""}`;
+  lvName.textContent = lvText(game.climberLevel);
+  const lv = document.createElement("input");
+  lv.type = "range";
+  lv.min = "1";
+  lv.max = "10";
+  lv.step = "1";
+  lv.value = String(game.climberLevel);
+  lv.addEventListener("input", () => {
+    const n = parseInt(lv.value, 10);
+    game.setClimberLevel(n);
+    lvName.textContent = lvText(n);
+  });
+  lvLabel.append(lvName, lv);
+  rows.appendChild(lvLabel);
 
   // 静音开关
   const muteLabel = document.createElement("label");

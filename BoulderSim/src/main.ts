@@ -44,7 +44,7 @@ function resize() {
 window.addEventListener("resize", resize);
 resize();
 
-installTuningPanel();
+installTuningPanel(game);
 installPointer(canvas, game, cam, () => hud);
 
 // 音效 + 振动反馈（首次用户手势内解锁 AudioContext）

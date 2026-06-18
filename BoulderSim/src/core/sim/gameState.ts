@@ -13,7 +13,7 @@ import {
   dist,
   clampLen,
 } from "../math/vec2.ts";
-import { ADULT } from "../model/body.ts";
+import { bodyForLevel } from "../model/body.ts";
 import {
   Limb,
   LIMBS,
@@ -82,10 +82,17 @@ export class Game {
   onGrab?: (match: number) => void;
 
   levelIndex = 0;
+  climberLevel = 5; // 选手级别 1-10（默认 5 老手；越高越强越不易掉）
 
   constructor(level: LevelDef) {
     this.levelIndex = Math.max(0, LEVELS.indexOf(level));
     this.load(level);
+  }
+
+  /** 设置选手级别（即时生效，不打断当前攀爬）：缩放指力/核心等能力 */
+  setClimberLevel(n: number) {
+    this.climberLevel = Math.max(1, Math.min(10, Math.round(n)));
+    if (this.c) this.c.body = bodyForLevel(this.climberLevel);
   }
 
   /** 切到下一条线路（退出按钮 / 调试用） */
@@ -147,15 +154,16 @@ export class Game {
       LF: limbs.LF.hold!.pos,
       RF: limbs.RF.hold!.pos,
     };
-    const bend = desiredBend({ ...ADULT }, pelvis, ori, startTargets);
+    const body = bodyForLevel(this.climberLevel);
+    const bend = desiredBend(body, pelvis, ori, startTargets);
     this.c = {
-      body: { ...ADULT },
+      body,
       pelvis,
       lean,
       shoulderTwist: 0,
       hipTwist: 0,
       limbs,
-      pose: resolvePose({ ...ADULT }, pelvis, ori, startTargets, bend),
+      pose: resolvePose(body, pelvis, ori, startTargets, bend),
       imbalanceT: 0,
       fallen: false,
       draggingLimb: null,

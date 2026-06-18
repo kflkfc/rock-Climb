@@ -341,8 +341,8 @@ export function stepClimber(
 
   const att = attachedLimbs(c);
 
-  // 整体掉落：抓点 < 2
-  if (att.length < 2) {
+  // 整体掉落：抓点 = 0（放宽：单手悬挂/单手引体允许，由抓力上限与平衡决定能否撑住）
+  if (att.length < 1) {
     c.fallen = true;
     res.fell = true;
     res.balanced = false;
@@ -455,8 +455,8 @@ export function stepClimber(
     }
   }
 
-  // 再次掉落判定
-  if (attachedLimbs(c).length < 2) {
+  // 再次掉落判定：抓点全部脱开才掉
+  if (attachedLimbs(c).length < 1) {
     c.fallen = true;
     res.fell = true;
   }
@@ -467,10 +467,18 @@ export function stepClimber(
 
 /**
  * 2D 侧视平衡判定：重心 X 落在抓点 X 跨度（±核心容差）内。
- * 单脚/单点不足以平衡；≥2 抓点才有支撑跨度。
+ *  - ≥2 抓点：重心 X 在跨度 ± 容差内。
+ *  - 单手悬挂：重心摆到手正下方即稳（钟摆），允许强者单手吊/引体。
+ *  - 单脚：无法平衡（会倾倒）。
  */
 export function comBalanced(c: Climber, att = attachedLimbs(c)): boolean {
-  if (att.length < 2) return false;
+  if (att.length === 0) return false;
+  const margin = 12 + c.body.coreStability * 34; // 核心越稳越不易失衡
+  if (att.length === 1) {
+    const l = att[0];
+    if (!isHand(l)) return false; // 单脚站立不稳
+    return Math.abs(c.pose.com.x - c.limbs[l].hold!.pos.x) <= margin; // 单手悬挂：重心在手下方
+  }
   let min = Infinity;
   let max = -Infinity;
   for (const l of att) {
@@ -478,7 +486,6 @@ export function comBalanced(c: Climber, att = attachedLimbs(c)): boolean {
     if (x < min) min = x;
     if (x > max) max = x;
   }
-  const margin = 12 + c.body.coreStability * 34; // 核心越稳越不易失衡
   return c.pose.com.x >= min - margin && c.pose.com.x <= max + margin;
 }
 

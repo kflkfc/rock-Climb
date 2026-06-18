@@ -27,7 +27,7 @@ export function drawHUD(ctx: CanvasRenderingContext2D, cam: Camera, game: Game):
   ctx.font = "700 26px system-ui, sans-serif";
   ctx.fillText(`${game.level.name}`, 16, 14);
   ctx.font = "600 15px system-ui, sans-serif";
-  ctx.fillText(`${game.level.grade}`, 16, 44);
+  ctx.fillText(`${game.level.grade}  ·  Lv${game.climberLevel}`, 16, 44);
   ctx.font = "16px system-ui, sans-serif";
   ctx.fillText(`✋ ${game.gripCount}`, 16, 70);
   ctx.fillText(`⏱ ${fmtTime(game.time)}`, 16, 92);
