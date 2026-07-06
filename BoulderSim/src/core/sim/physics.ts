@@ -69,6 +69,10 @@ export interface Climber {
   pullBlend: number;
   /** 各肢端连续弯曲量 ∈[-1,1]（逐帧缓动到目标符号 → 关节平滑换侧不突变） */
   bend: Record<Limb, number>;
+  /** 混合法①：骨盆速度（弹簧-阻尼积分 → 伸手有动量跟随/过冲，再阻尼稳定） */
+  pelvisVel: Vec2;
+  /** 混合法③：自由肢端 Verlet 上一帧位置（次级摆动：悬腿会荡、跟随身体） */
+  freePrev: Record<Limb, Vec2>;
 }
 
 /** 由 Climber 构造姿态解算所需的朝向对象 */
@@ -139,16 +143,10 @@ function solvePelvis(c: Climber, dt: number, t: Tuning) {
     tgt = add(tgt, scale(contrib, w));
     wsum += w;
   }
-  if (wsum > 0) {
-    const target = scale(tgt, 1 / wsum);
-    // 帧率无关的平滑跟随：身体逐步追上肢端 → 攀爬有"发力上移"的手感
-    const k = 1 - Math.pow(1 - t.pelvisFollow, dt * 60);
-    c.pelvis = add(c.pelvis, scale(sub(target, c.pelvis), k));
-  }
+  let target = c.pelvis;
+  if (wsum > 0) target = scale(tgt, 1 / wsum);
 
-  // 两/三点平衡(counterbalance)：抬肢减少支撑时，重心(骨盆 X)主动移到剩余支撑点上方，
-  // 读出"靠剩余两三点平衡、再发力移动"，而非四点死贴墙。抬得越多移得越果断。
-  // 把"正在拖动"的肢端按其目标位也算作支撑点 → 抓住瞬间支撑集合不变、重心目标连续。
+  // 两/三点平衡(counterbalance)：抬肢减少支撑时，把目标重心(X)移到剩余支撑点上方。
   const supX: number[] = [];
   for (const l of LIMBS) {
     if (c.limbs[l].attached && c.limbs[l].hold) supX.push(c.limbs[l].hold!.pos.x);
@@ -157,12 +155,32 @@ function solvePelvis(c: Climber, dt: number, t: Tuning) {
   if (supX.length >= 1 && supX.length < 4) {
     const cx = supX.reduce((a, b) => a + b, 0) / supX.length;
     const strength = Math.min(0.9, (4 - supX.length) * t.balanceShift);
-    const kb = 1 - Math.pow(1 - strength, dt * 60);
-    c.pelvis.x += (cx - c.pelvis.x) * kb;
+    target = { x: target.x + (cx - target.x) * strength, y: target.y };
   }
 
-  // 硬钳制：任何抓住肢端都不得超过最大伸展（设计文档：手≤臂长 / 脚≤腿长）
-  for (let kk = 0; kk < 4; kk++) {
+  // 混合法①：弹簧-阻尼积分骨盆 → 伸手/dyno 有动量跟随与轻微过冲，再阻尼稳定
+  // （替代原来的临界阻尼平滑：现在身体是"落"到位而不是"滑"到位）。
+  let accel = scale(sub(target, c.pelvis), t.pelvisStiff);
+
+  // 混合法②：抓点柔性——支撑肢端超出伸展极限时用"刚性弹簧"回拉，允许轻微过伸/下沉，
+  // 身体自然 settle 到抓点上，而非瞬间硬钉。（load 越大理论上下沉越多，这里用几何近似。）
+  {
+    const pose = resolvePose(c.body, c.pelvis, oriOf(c), targetsOf(c), c.bend);
+    for (const l of attachedLimbs(c)) {
+      const root = pose.limb[l].root;
+      const hold = c.limbs[l].hold!;
+      const d = dist(root, hold.pos);
+      const maxR = maxReachOf(c.body, l) * t.reachSlack;
+      if (d > maxR) accel = add(accel, scale(norm(sub(hold.pos, root)), (d - maxR) * t.gripStiff));
+    }
+  }
+
+  c.pelvisVel = add(c.pelvisVel, scale(accel, dt));
+  c.pelvisVel = scale(c.pelvisVel, Math.pow(t.pelvisDamp, dt * 60)); // 阻尼
+  c.pelvis = add(c.pelvis, scale(c.pelvisVel, dt));
+
+  // 安全硬钳制（较松 1.18×，仅防跑飞）：触限时吸收沿约束方向的速度，避免抖
+  for (let kk = 0; kk < 3; kk++) {
     const pose = resolvePose(c.body, c.pelvis, oriOf(c), targetsOf(c), c.bend);
     let corr = v(0, 0);
     let n = 0;
@@ -170,14 +188,21 @@ function solvePelvis(c: Climber, dt: number, t: Tuning) {
       const root = pose.limb[l].root;
       const hold = c.limbs[l].hold!;
       const d = dist(root, hold.pos);
-      const maxR = maxReachOf(c.body, l) * t.reachSlack;
+      const maxR = maxReachOf(c.body, l) * t.reachSlack * 1.18;
       if (d > maxR) {
         corr = add(corr, scale(norm(sub(hold.pos, root)), d - maxR));
         n++;
       }
     }
     if (n === 0) break;
-    c.pelvis = add(c.pelvis, scale(corr, 1 / n));
+    const push = scale(corr, 1 / n);
+    c.pelvis = add(c.pelvis, push);
+    const pl = len(push);
+    if (pl > 1e-4) {
+      const nrm = scale(push, 1 / pl);
+      const vn = c.pelvisVel.x * nrm.x + c.pelvisVel.y * nrm.y;
+      if (vn < 0) c.pelvisVel = sub(c.pelvisVel, scale(nrm, vn)); // 去掉撞向约束的速度
+    }
   }
 }
 
@@ -245,17 +270,18 @@ function updatePullBlend(c: Climber, dt: number) {
 }
 
 /**
- * 自由肢端（非玩家拖动者）柔和趋向自然姿态：
- *  - 脚：flag 摆腿——向一侧斜下甩出做配重，而非僵直下垂。
- *  - 手：放松微屈悬于身侧，柔和回位（够不到松手不会突然下垂、生硬）。
- * 帧率无关缓动(~0.25s) → 自然不突兀。注：自由肢端不计入支撑/重心，纯姿态。
+ * 混合法③：自由肢端（非玩家拖动者）Verlet 次级运动。
+ *  - 惯性(prev→cur) + 世界重力 + 朝"自然休息位(flag/放松悬)"的软弹簧。
+ *  - 身体一动，悬着的腿/手会像钟摆一样甩、滞后，再自然 settle → 有生命感、不僵硬。
+ *  - 末端约束在根关节可达范围内。注：自由肢端不计入支撑/重心，纯姿态。
  */
-function solveFreeLimbs(c: Climber, dt: number) {
+function solveFreeLimbs(c: Climber, dt: number, t: Tuning) {
   const pose = c.pose;
   if (!pose) return;
   const up = rotate({ x: 0, y: -1 }, c.lean);
   const down = scale(up, -1);
   const right = { x: -up.y, y: up.x };
+  const gravity = { x: 0, y: t.limbGravity }; // 世界重力（屏幕 +y 向下），与身体朝向无关
   const att = attachedLimbs(c);
   let supX = c.pelvis.x;
   if (att.length > 0) {
@@ -263,28 +289,40 @@ function solveFreeLimbs(c: Climber, dt: number) {
     for (const l of att) supX += c.limbs[l].hold!.pos.x;
     supX /= att.length;
   }
-  const k = 1 - Math.pow(1 - 0.1, dt * 60);
   for (const l of LIMBS) {
     const st = c.limbs[l];
-    if (st.attached || l === c.draggingLimb) continue;
+    if (st.attached || l === c.draggingLimb) {
+      c.freePrev[l] = { ...st.freePos }; // 保持同步，脱开/松手瞬间不产生假速度
+      continue;
+    }
     const root = pose.limb[l].root;
-    let tgt: Vec2;
+    // 自然休息位（flag / 放松悬）——弹簧目标
+    let rest: Vec2;
     if (isHand(l)) {
-      // 放松微屈，悬于身侧、略收向身体中线
-      tgt = add(
+      rest = add(
         root,
         add(scale(down, armReach(c.body) * 0.5), scale(right, (c.pelvis.x - root.x) * 0.15)),
       );
     } else {
-      // flag 摆腿：向一侧斜下甩出（远离支撑质心的一侧，做出明显的配重摆腿）
       const d = root.x - supX;
       const side = Math.abs(d) < 6 ? (l === "LF" ? -1 : 1) : Math.sign(d);
-      tgt = add(
+      rest = add(
         root,
         add(scale(down, legReach(c.body) * 0.66), scale(right, side * legReach(c.body) * 0.5)),
       );
     }
-    st.freePos = add(st.freePos, scale(sub(tgt, st.freePos), k));
+    // Verlet：next = cur + 惯性 + (重力 + 回位弹簧)·dt²
+    const cur = st.freePos;
+    const vel = scale(sub(cur, c.freePrev[l]), t.limbSwingDamp);
+    const acc = add(gravity, scale(sub(rest, cur), t.limbRestPull));
+    let next = add(add(cur, vel), scale(acc, dt * dt));
+    // 约束：末端不超出根关节可达范围
+    const off = sub(next, root);
+    const d2 = len(off);
+    const maxR = maxReachOf(c.body, l) * t.reachSlack;
+    if (d2 > maxR) next = add(root, scale(off, maxR / d2));
+    c.freePrev[l] = { ...cur };
+    st.freePos = next;
   }
 }
 
@@ -333,7 +371,7 @@ export function stepClimber(
 
   // 1+ 发力混合 → 自由肢端摆放 → 骨盆跟随 → 身体朝向 → 关节弯曲 → 姿态
   updatePullBlend(c, dt);
-  solveFreeLimbs(c, dt);
+  solveFreeLimbs(c, dt, t);
   solvePelvis(c, dt, t);
   solveOrientation(c, dt, t);
   updateBend(c, dt);

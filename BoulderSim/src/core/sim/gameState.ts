@@ -169,6 +169,13 @@ export class Game {
       draggingLimb: null,
       pullBlend: 0,
       bend,
+      pelvisVel: v(0, 0),
+      freePrev: {
+        LH: { ...limbs.LH.freePos },
+        RH: { ...limbs.RH.freePos },
+        LF: { ...limbs.LF.freePos },
+        RF: { ...limbs.RF.freePos },
+      },
     };
     this.status = "climbing";
     this.gripCount = 0;

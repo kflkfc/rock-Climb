@@ -19,6 +19,13 @@ export interface Tuning {
   maxForceK: number; // 抓力上限缩放
   reachSlack: number; // 伸展极限宽容（>1 略微允许超伸）
   fallResetDelay: number; // 掉落后自动复位起点的延迟（秒）
+  // 混合法：骨盆弹簧-阻尼动量 + 抓点柔性 + 自由肢端 Verlet 摆动
+  pelvisStiff: number; // 骨盆弹簧刚度（越大越跟目标、动量越小）
+  pelvisDamp: number; // 骨盆速度每帧保留 0..1（越小越快稳、越大越荡/过冲）
+  gripStiff: number; // 抓点柔性刚度：超伸时回拉刚度（越大越硬钉、越小越下沉）
+  limbGravity: number; // 自由肢端重力（px/s²，次级摆动下坠）
+  limbSwingDamp: number; // 自由肢端惯性保留 0..1（越大摆得越久）
+  limbRestPull: number; // 自由肢端回到休息位的弹簧（越大越快归位、摆动越小）
 }
 
 export const tuning: Tuning = {
@@ -40,6 +47,12 @@ export const tuning: Tuning = {
   tensionCost: 0.6,
   rotFollow: 0.12,
   rotLimit: 0.6,
+  pelvisStiff: 240,
+  pelvisDamp: 0.82,
+  gripStiff: 120,
+  limbGravity: 900,
+  limbSwingDamp: 0.9,
+  limbRestPull: 55,
 };
 
 export interface TuneSpec {
@@ -67,4 +80,10 @@ export const TUNE_SPECS: TuneSpec[] = [
   { key: "tensionCost", label: "张力开销", min: 0, max: 2, step: 0.05 },
   { key: "rotFollow", label: "旋转跟随", min: 0.03, max: 0.4, step: 0.01 },
   { key: "rotLimit", label: "旋转限幅", min: 0.2, max: 1.2, step: 0.05 },
+  { key: "pelvisStiff", label: "骨盆刚度", min: 60, max: 600, step: 10 },
+  { key: "pelvisDamp", label: "骨盆阻尼", min: 0.5, max: 0.97, step: 0.01 },
+  { key: "gripStiff", label: "抓点柔性", min: 20, max: 400, step: 10 },
+  { key: "limbGravity", label: "肢端重力", min: 0, max: 2000, step: 50 },
+  { key: "limbSwingDamp", label: "摆动惯性", min: 0.5, max: 0.98, step: 0.01 },
+  { key: "limbRestPull", label: "回位弹簧", min: 10, max: 200, step: 5 },
 ];
