@@ -1,7 +1,7 @@
 // 引导：canvas / 60Hz 循环 / 串起 input → core → render。
 
 import { Game } from "./core/sim/gameState.ts";
-import { LEVELS } from "./core/level/levels.ts";
+import { LEVELS, LEVEL_SEQS } from "./core/level/levels.ts";
 import { Camera } from "./render/camera.ts";
 import { drawWall } from "./render/drawWall.ts";
 import { drawHolds } from "./render/drawHolds.ts";
@@ -67,6 +67,7 @@ window.addEventListener("keydown", (e) => {
 
 // 开发调试钩子（便于运行时检查状态，不影响玩法）
 (window as unknown as { __game: Game }).__game = game;
+(window as unknown as { __seqs: typeof LEVEL_SEQS }).__seqs = LEVEL_SEQS;
 
 let lastLevelId = game.level.id;
 
@@ -85,7 +86,7 @@ function tick(dt: number) {
   cam.follow(pose.com.x, pose.com.y, dt);
 
   ctx.clearRect(0, 0, canvas.width, canvas.height);
-  drawWall(ctx, cam, game.level.wallAngleDeg);
+  drawWall(ctx, cam, game.level);
   drawHolds(ctx, cam, game);
   drawReach(ctx, cam, game);
 

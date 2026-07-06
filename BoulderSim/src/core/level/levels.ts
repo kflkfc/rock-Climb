@@ -1,133 +1,254 @@
-// 纯逻辑 · 切片关卡：1 面直壁(90°) + 1 条 V0 平衡路线。
-// 名字沿用 Klifur 冰岛语风格：ÞREP（台阶）。起手 4 个大水罐，向上以 Jug 为主，
-// 穿插 1 Crimp / 1 Pinch / 1 Sloper 让 4 种岩点都出现，顶部彩虹终点。
+// 纯逻辑 · 6 条关卡（V1 直壁 / V2 横移 / V3 上下 / V4 特定动作 / V5 仰角+直壁 / V6 屋檐倒挂）。
+// 用"轨道采样"生成器：手轨/脚轨沿折线按步长布点，相邻同肢移动在臂/腿可达内 → 保证可解。
 
 import { LevelDef, HoldDef } from "./levelSchema.ts";
+import { Limb } from "../model/skeleton.ts";
+import { HoldType } from "../sim/holds.ts";
 
-const WORLD_W = 720; // 加宽攀岩墙（摄像机固定缩放 + 横向滚动）
+const WORLD_W = 720;
+const WORLD_H = 1000;
 
-const THREP_BASE: LevelDef = {
-  id: "threp",
-  name: "ÞREP",
-  grade: "V0",
-  wallAngleDeg: 90,
-  worldWidth: WORLD_W,
-  worldHeight: 1000,
-  goalHoldId: "goal",
-  starThreshold: 6,
-  holds: [
-    // 起始 4 点：手高于头(上举)、脚在下(站立)，让起手姿态自然舒展而非半蹲蛙形
-    { id: "s_lh", type: "jug", x: 196, y: 574, start: "LH" },
-    { id: "s_rh", type: "jug", x: 248, y: 560, start: "RH" },
-    { id: "s_lf", type: "jug", x: 202, y: 846, start: "LF" },
-    { id: "s_rf", type: "jug", x: 234, y: 852, start: "RF" },
-
-    // 上行路线（左右交替，间距控制在臂/腿可达内）
-    // h1 = 左侧"侧拉"：朝向向右(0°)，需把身体保持在它右侧、横向受力（非直挂下方）
-    { id: "h1", type: "crimp", x: 150, y: 590, pullDirDeg: 0, pullTolDeg: 70 },
-    { id: "h2", type: "pinch", x: 260, y: 560, pullDirDeg: 90 },
-    { id: "f1", type: "jug", x: 198, y: 720 },
-    { id: "f2", type: "crimp", x: 232, y: 700, pullDirDeg: 90 },
-
-    { id: "h3", type: "jug", x: 200, y: 470 },
-    { id: "h4", type: "sloper", x: 280, y: 440, radius: 28 },
-    { id: "f3", type: "jug", x: 193, y: 600 },
-    { id: "f4", type: "jug", x: 231, y: 580 },
-
-    // h5 = "下扣"undercling：朝向向上(-90°)，需身体升到它上方、向上抠
-    { id: "h5", type: "crimp", x: 175, y: 360, pullDirDeg: -90, pullTolDeg: 75 },
-    // h6 = 右侧"侧拉"：朝向向左(180°)，身体保持在它左侧横向受力
-    { id: "h6", type: "crimp", x: 270, y: 340, pullDirDeg: 180, pullTolDeg: 70 },
-    { id: "f5", type: "jug", x: 212, y: 480 },
-    { id: "f6", type: "jug", x: 250, y: 470 },
-
-    { id: "h7", type: "jug", x: 210, y: 250 },
-    { id: "f7", type: "jug", x: 207, y: 370 },
-    { id: "f8", type: "jug", x: 247, y: 360 },
-
-    // 顶部彩虹终点
-    { id: "goal", type: "jug", x: 220, y: 150, radius: 24, goal: true },
-  ],
-};
-
-/**
- * 把一条线路水平"剪切"成斜上线路：越往上(y 越小)整体越往一侧偏移。
- * 因为剪切保持了相邻岩点的纵向间距与相对几何，可解性与原竖线一致，
- * 只是身体需要一路斜向移动 + 偏身/配重/flag —— 正好检验这些系统。
- * k>0 → 斜向右上；k<0 → 斜向左上。
- */
-/** 整体平移线路（用于把窄竖线居中到加宽的墙上）。 */
-function translateRoute(base: LevelDef, dx: number): LevelDef {
-  return { ...base, holds: base.holds.map((h) => ({ ...h, x: Math.round(h.x + dx) })) };
+interface Pt {
+  x: number;
+  y: number;
 }
 
-// ÞREP 原始 x≈150-280（中心~215），平移到加宽墙中心
-export const LEVEL_THREP = translateRoute(THREP_BASE, WORLD_W / 2 - 215);
+/** 沿折线按弧长等分采样 n 个点。 */
+function sampleRail(poly: Pt[], n: number): Pt[] {
+  const segLen: number[] = [];
+  let total = 0;
+  for (let i = 1; i < poly.length; i++) {
+    const l = Math.hypot(poly[i].x - poly[i - 1].x, poly[i].y - poly[i - 1].y);
+    segLen.push(l);
+    total += l;
+  }
+  const out: Pt[] = [];
+  for (let k = 0; k < n; k++) {
+    let d = (total * k) / (n - 1);
+    let i = 0;
+    while (i < segLen.length && d > segLen[i]) {
+      d -= segLen[i];
+      i++;
+    }
+    if (i >= segLen.length) {
+      out.push({ ...poly[poly.length - 1] });
+    } else {
+      const t = segLen[i] < 1e-6 ? 0 : d / segLen[i];
+      out.push({
+        x: poly[i].x + (poly[i + 1].x - poly[i].x) * t,
+        y: poly[i].y + (poly[i + 1].y - poly[i].y) * t,
+      });
+    }
+  }
+  return out;
+}
 
-const SHEAR_REF = 850; // 参考底线 y（起手脚附近），此处偏移为 0
-function shearRoute(
-  base: LevelDef,
-  opts: { id: string; name: string; grade?: string; k: number; wallAngleDeg?: number },
-): LevelDef {
-  return {
-    ...base,
-    id: opts.id,
-    name: opts.name,
-    grade: opts.grade ?? base.grade,
-    wallAngleDeg: opts.wallAngleDeg ?? base.wallAngleDeg,
-    holds: base.holds.map((h) => ({ ...h, x: Math.round(h.x + (SHEAR_REF - h.y) * opts.k) })),
+interface RouteCfg {
+  id: string;
+  name: string;
+  grade: string;
+  wallAngleDeg: number;
+  wallAngleTop?: number;
+  handRail: Pt[]; // 手轨折线
+  footRail: Pt[]; // 脚轨折线
+  nHand: number; // 手点数
+  nFoot: number; // 脚点数
+  zig?: number; // 左右交替偏移幅度
+  handType?: (i: number, n: number) => Partial<HoldDef>; // 指定手点类型/朝向
+  footType?: (i: number, n: number) => Partial<HoldDef>;
+  starThreshold?: number;
+}
+
+/** 生成一条可攀线路 + 验证用攀爬序列。手点 h0..、脚点 f0..，起手用各前 2 点。 */
+function buildRoute(cfg: RouteCfg): { level: LevelDef; seq: [Limb, string][] } {
+  const zig = cfg.zig ?? 26;
+  const hp = sampleRail(cfg.handRail, cfg.nHand);
+  const fp = sampleRail(cfg.footRail, cfg.nFoot);
+  const holds: HoldDef[] = [];
+
+  for (let i = 0; i < hp.length; i++) {
+    const side = i % 2 === 0 ? -1 : 1;
+    const goal = i === hp.length - 1;
+    const extra = cfg.handType ? cfg.handType(i, hp.length) : {};
+    holds.push({
+      id: goal ? "goal" : `h${i}`,
+      type: (extra.type ?? "jug") as HoldType,
+      x: Math.round(hp[i].x + side * zig),
+      y: Math.round(hp[i].y),
+      ...(goal ? { goal: true, radius: 24 } : {}),
+      ...extra,
+      ...(i === 0 ? { start: "LH" as Limb } : i === 1 ? { start: "RH" as Limb } : {}),
+    });
+  }
+  for (let i = 0; i < fp.length; i++) {
+    const side = i % 2 === 0 ? -1 : 1;
+    const extra = cfg.footType ? cfg.footType(i, fp.length) : {};
+    holds.push({
+      id: `f${i}`,
+      type: (extra.type ?? "jug") as HoldType,
+      x: Math.round(fp[i].x + side * zig * 0.7),
+      y: Math.round(fp[i].y),
+      ...extra,
+      ...(i === 0 ? { start: "LF" as Limb } : i === 1 ? { start: "RF" as Limb } : {}),
+    });
+  }
+
+  // 攀爬序列：每轮先两手上、再两脚上（脚滞后手约一轮）→ 稳定，末手抓终点
+  const seq: [Limb, string][] = [];
+  const hid = (i: number) => (i === hp.length - 1 ? "goal" : `h${i}`);
+  let hi = 2;
+  let fi = 2;
+  let guard = 0;
+  while ((hi < hp.length || fi < fp.length) && guard++ < 60) {
+    if (hi < hp.length) {
+      seq.push([hi % 2 === 0 ? "LH" : "RH", hid(hi)]);
+      if (hid(hi) === "goal") break;
+      hi++;
+      if (hi < hp.length) {
+        seq.push([hi % 2 === 0 ? "LH" : "RH", hid(hi)]);
+        if (hid(hi) === "goal") break;
+        hi++;
+      }
+    }
+    if (fi < fp.length) {
+      seq.push([fi % 2 === 0 ? "LF" : "RF", `f${fi}`]);
+      fi++;
+      if (fi < fp.length) {
+        seq.push([fi % 2 === 0 ? "LF" : "RF", `f${fi}`]);
+        fi++;
+      }
+    }
+  }
+
+  const level: LevelDef = {
+    id: cfg.id,
+    name: cfg.name,
+    grade: cfg.grade,
+    wallAngleDeg: cfg.wallAngleDeg,
+    ...(cfg.wallAngleTop != null ? { wallAngleTop: cfg.wallAngleTop } : {}),
+    worldWidth: WORLD_W,
+    worldHeight: WORLD_H,
+    holds,
+    goalHoldId: "goal",
+    starThreshold: cfg.starThreshold ?? Math.ceil(seq.length * 0.9),
   };
+  return { level, seq };
 }
 
-/** 斜向右上 */
-export const LEVEL_SKA_R = shearRoute(LEVEL_THREP, { id: "ska_r", name: "SKÁ →", grade: "V1", k: 0.24 });
-/** 斜向左上 */
-export const LEVEL_SKA_L = shearRoute(LEVEL_THREP, { id: "ska_l", name: "SKÁ ←", grade: "V1", k: -0.24 });
-/** 仰角斜线（135° 屋檐感）：更宽的斜向右上 + 手承重更多，身体大幅后仰 */
-export const LEVEL_THAK = shearRoute(LEVEL_THREP, {
-  id: "thak",
-  name: "ÞAK ⤢",
-  grade: "V3",
-  k: 0.3,
-  wallAngleDeg: 135,
+// ---- V1 KLIFR：基本垂直，15 点 ----
+const V1 = buildRoute({
+  id: "v1",
+  name: "KLIFR",
+  grade: "V1",
+  wallAngleDeg: 90,
+  handRail: [{ x: 360, y: 560 }, { x: 360, y: 235 }],
+  footRail: [{ x: 360, y: 770 }, { x: 360, y: 500 }],
+  nHand: 9,
+  nFoot: 6,
+  zig: 32,
+  handType: (i, n) => (i === 3 ? { type: "crimp", pullDirDeg: 90 } : i === n - 3 ? { type: "sloper", radius: 28 } : {}),
 });
 
-/**
- * 屋檐倒挂横移线 HVOLF（170° 近屋檐）：脚踩上排、手抓下排 → 身体头下脚上倒挂，
- * 沿屋檐底向右横移（小步 shuffle，不跨过另一肢）。重力近乎垂直墙面，手承重为主。
- */
-const HVOLF_HX = [300, 370, 440, 510, 580, 650]; // 列
-function hvolfHolds(): HoldDef[] {
-  const hs: HoldDef[] = [];
-  // 起手：左肢在列0、右肢在列1（脚上排 y300 / 手下排 y420 → 倒挂）
-  hs.push({ id: "s_lf", type: "jug", x: HVOLF_HX[0], y: 300, start: "LF" });
-  hs.push({ id: "s_rf", type: "jug", x: HVOLF_HX[1], y: 300, start: "RF" });
-  hs.push({ id: "s_lh", type: "jug", x: HVOLF_HX[0], y: 420, start: "LH" });
-  hs.push({ id: "s_rh", type: "jug", x: HVOLF_HX[1], y: 420, start: "RH" });
-  // 其余列：每列一个脚点(上)一个手点(下)
-  for (let i = 2; i < HVOLF_HX.length; i++) {
-    hs.push({ id: `f${i}`, type: "jug", x: HVOLF_HX[i], y: 300 });
-    const goal = i === HVOLF_HX.length - 1;
-    hs.push({ id: goal ? "goal" : `h${i}`, type: "jug", x: HVOLF_HX[i], y: 420, radius: goal ? 24 : undefined, goal });
-  }
-  return hs;
-}
-export const LEVEL_HVOLF: LevelDef = {
-  id: "hvolf",
-  name: "HVOLF ∩",
+// ---- V2 SKÁ：45°+ 斜向横移，20 点 ----
+const V2 = buildRoute({
+  id: "v2",
+  name: "SKÁ",
+  grade: "V2",
+  wallAngleDeg: 90,
+  handRail: [{ x: 150, y: 540 }, { x: 560, y: 250 }],
+  footRail: [{ x: 175, y: 730 }, { x: 560, y: 445 }],
+  nHand: 11,
+  nFoot: 9,
+  zig: 16,
+  handType: (i) => (i === 4 || i === 7 ? { type: "crimp", pullDirDeg: 180, pullTolDeg: 75 } : {}),
+});
+
+// ---- V3 HVELF：先上后下（拱形），30 点 ----
+const V3 = buildRoute({
+  id: "v3",
+  name: "HVELF",
+  grade: "V3",
+  wallAngleDeg: 90,
+  handRail: [{ x: 250, y: 520 }, { x: 265, y: 275 }, { x: 400, y: 225 }, { x: 535, y: 275 }, { x: 550, y: 500 }],
+  footRail: [{ x: 250, y: 710 }, { x: 285, y: 455 }, { x: 400, y: 410 }, { x: 515, y: 455 }, { x: 550, y: 690 }],
+  nHand: 16,
+  nFoot: 14,
+  zig: 16,
+});
+
+// ---- V4 GASTON：指定动作（侧拉/下扣 crux 才能过），20 点 ----
+const V4 = buildRoute({
+  id: "v4",
+  name: "GASTON",
+  grade: "V4",
+  wallAngleDeg: 95,
+  handRail: [{ x: 360, y: 560 }, { x: 360, y: 220 }],
+  footRail: [{ x: 360, y: 745 }, { x: 360, y: 465 }],
+  nHand: 11,
+  nFoot: 9,
+  zig: 30,
+  // crux：中段三个方向点——右侧拉→下扣→左侧拉，逼迫偏身/张力才能吃住
+  handType: (i) => {
+    if (i === 4) return { type: "crimp", pullDirDeg: 180, pullTolDeg: 50 };
+    if (i === 5) return { type: "crimp", pullDirDeg: -90, pullTolDeg: 50 };
+    if (i === 6) return { type: "crimp", pullDirDeg: 0, pullTolDeg: 50 };
+    return {};
+  },
+  starThreshold: 16,
+});
+
+// ---- V5 ÞAK：底部直壁 → 顶部大仰角（变墙角），24 点 ----
+const V5 = buildRoute({
+  id: "v5",
+  name: "ÞAK",
   grade: "V5",
+  wallAngleDeg: 90,
+  wallAngleTop: 138,
+  handRail: [{ x: 360, y: 600 }, { x: 360, y: 190 }],
+  footRail: [{ x: 360, y: 790 }, { x: 360, y: 430 }],
+  nHand: 13,
+  nFoot: 11,
+  zig: 30,
+  handType: (i, n) => (i >= n - 5 ? { type: "jug", radius: 22 } : {}), // 顶部仰角段用大水罐好抓
+});
+
+// ---- V6 HVOLF：屋檐倒挂横移（脚在上排、手在下排，头下脚上），20 点 ----
+const V6 = buildRoute({
+  id: "v6",
+  name: "HVOLF",
+  grade: "V6",
   wallAngleDeg: 170,
-  worldWidth: WORLD_W,
-  worldHeight: 1000,
-  goalHoldId: "goal",
-  starThreshold: 10,
-  holds: hvolfHolds(),
-};
+  // 手轨在下(y大)、脚轨在上(y小) → 倒挂；横向从左到右
+  handRail: [{ x: 210, y: 430 }, { x: 560, y: 430 }],
+  footRail: [{ x: 210, y: 305 }, { x: 560, y: 305 }],
+  nHand: 10,
+  nFoot: 10,
+  zig: 8,
+  starThreshold: 14,
+});
+
+export const LEVEL_V1 = V1.level;
+export const LEVEL_V2 = V2.level;
+export const LEVEL_V3 = V3.level;
+export const LEVEL_V4 = V4.level;
+export const LEVEL_V5 = V5.level;
+export const LEVEL_V6 = V6.level;
 
 export const LEVELS: LevelDef[] = [
-  LEVEL_THREP,
-  LEVEL_SKA_R,
-  LEVEL_SKA_L,
-  LEVEL_THAK,
-  LEVEL_HVOLF,
+  LEVEL_V1,
+  LEVEL_V2,
+  LEVEL_V3,
+  LEVEL_V4,
+  LEVEL_V5,
+  LEVEL_V6,
 ];
+
+/** 开发/测试用：各关的一条参考攀爬序列。 */
+export const LEVEL_SEQS: Record<string, [Limb, string][]> = {
+  v1: V1.seq,
+  v2: V2.seq,
+  v3: V3.seq,
+  v4: V4.seq,
+  v5: V5.seq,
+  v6: V6.seq,
+};

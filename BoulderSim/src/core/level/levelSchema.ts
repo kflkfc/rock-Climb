@@ -20,10 +20,19 @@ export interface LevelDef {
   id: string;
   name: string; // 关卡名（Klifur 风格大写）
   grade: string; // 难度等级 V0..
-  wallAngleDeg: number; // 90 = 直壁
+  wallAngleDeg: number; // 底部墙角。90 = 直壁；>90 = 仰角/屋檐
+  /** 顶部墙角（可选）。设了则墙角随高度从底(wallAngleDeg)线性过渡到顶(wallAngleTop)。 */
+  wallAngleTop?: number;
   worldWidth: number;
   worldHeight: number;
   holds: HoldDef[];
   goalHoldId: string;
   starThreshold: number; // 三星达标：抓取次数 ≤ 此值
+}
+
+/** 某高度 y 处的墙角（底 y=worldHeight → wallAngleDeg，顶 y=0 → wallAngleTop）。 */
+export function wallAngleAtY(level: LevelDef, y: number): number {
+  if (level.wallAngleTop == null) return level.wallAngleDeg;
+  const t = Math.max(0, Math.min(1, 1 - y / level.worldHeight)); // 0=底 1=顶
+  return level.wallAngleDeg + (level.wallAngleTop - level.wallAngleDeg) * t;
 }

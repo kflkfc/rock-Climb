@@ -32,7 +32,7 @@ import {
   limbTarget,
   attachedLimbs,
 } from "./physics.ts";
-import { LevelDef } from "../level/levelSchema.ts";
+import { LevelDef, wallAngleAtY } from "../level/levelSchema.ts";
 import { LEVELS } from "../level/levels.ts";
 import { tuning } from "../../config/tuning.ts";
 
@@ -340,7 +340,9 @@ export class Game {
       // 抓法环弹出时物理暂停（玩家思考），其余照常步进
       if (this.status === "climbing") {
         this.recordReplay(dt);
-        const r = stepClimber(this.c, this.level.wallAngleDeg, dt, tuning);
+        // 墙角按当前重心高度取（支持"底直壁→顶仰角"这类变墙角关卡）
+        const wall = wallAngleAtY(this.level, this.c.pose.com.y);
+        const r = stepClimber(this.c, wall, dt, tuning);
         if (r.slipped.length > 0) {
           this.dbg.push({
             t: +this.time.toFixed(2),

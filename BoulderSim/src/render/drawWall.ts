@@ -2,6 +2,7 @@
 
 import { Camera } from "./camera.ts";
 import { gravityComponents } from "../core/sim/physics.ts";
+import { LevelDef, wallAngleAtY } from "../core/level/levelSchema.ts";
 
 let grain: HTMLCanvasElement | null = null;
 function grainTile(): HTMLCanvasElement {
@@ -28,14 +29,19 @@ function wallLightness(angleDeg: number): number {
   return 84 - t * 34;
 }
 
-export function drawWall(ctx: CanvasRenderingContext2D, cam: Camera, angleDeg: number) {
-  const L = wallLightness(angleDeg);
-  ctx.fillStyle = `hsl(43 38% ${L}%)`;
+export function drawWall(ctx: CanvasRenderingContext2D, cam: Camera, level: LevelDef) {
+  // 按可视区顶/底的世界高度取墙角 → 竖向亮度渐变（支持变墙角关卡：底亮直壁→顶暗仰角）
+  const angTop = wallAngleAtY(level, cam.toWorld(0, 0).y);
+  const angBot = wallAngleAtY(level, cam.toWorld(0, cam.canvasH).y);
+  const grad = ctx.createLinearGradient(0, 0, 0, cam.canvasH);
+  grad.addColorStop(0, `hsl(43 38% ${wallLightness(angTop)}%)`);
+  grad.addColorStop(1, `hsl(43 38% ${wallLightness(angBot)}%)`);
+  ctx.fillStyle = grad;
   ctx.fillRect(0, 0, cam.canvasW, cam.canvasH);
 
   // 仰角顶部加深渐变（暗示上方遮挡）
-  const { perp } = gravityComponents(angleDeg);
-  if (perp > 0.05 && angleDeg > 95) {
+  const { perp } = gravityComponents(Math.max(angTop, angBot));
+  if (perp > 0.05 && Math.max(angTop, angBot) > 95) {
     const g = ctx.createLinearGradient(0, 0, 0, cam.canvasH * 0.5);
     g.addColorStop(0, `rgba(40,30,20,${0.05 + perp * 0.25})`);
     g.addColorStop(1, "rgba(40,30,20,0)");
