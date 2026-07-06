@@ -46,13 +46,14 @@ export function maxReachOf(b: BodyParams, l: Limb): number {
   return l === "LH" || l === "RH" ? armReach(b) : legReach(b);
 }
 
-// 各肢端在身体坐标系里的"期望弯曲侧"方向（肘向下外、膝向外略下）。
+// 各肢端在身体坐标系里的"期望弯曲侧"方向。
+// 肘向下且略外；膝主要朝下(自然屈膝)、仅略偏外 —— 避免悬挂时双腿撇成青蛙。
 function bendWant(l: Limb, up: Vec2, right: Vec2): Vec2 {
   const down = scale(up, -1);
   if (l === "LH") return norm(add(down, scale(right, -0.6)));
   if (l === "RH") return norm(add(down, scale(right, 0.6)));
-  if (l === "LF") return norm(add(scale(right, -1), scale(down, 0.35)));
-  return norm(add(scale(right, 1), scale(down, 0.35)));
+  if (l === "LF") return norm(add(scale(down, 1), scale(right, -0.35)));
+  return norm(add(scale(down, 1), scale(right, 0.35)));
 }
 
 /**
