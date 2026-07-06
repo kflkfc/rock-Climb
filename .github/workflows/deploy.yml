@@ -10,9 +10,11 @@ permissions:
   pages: write
   id-token: write
 
+# 不取消进行中的部署：Pages 部署被中途取消会报 "Deployment failed, try again later"。
+# 对齐 GitHub 官方 Pages 工作流，连续推送时排队而非互相取消。
 concurrency:
   group: pages
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   build:
