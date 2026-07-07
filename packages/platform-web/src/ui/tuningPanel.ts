@@ -2,10 +2,12 @@
 
 import { tuning, TUNE_SPECS } from "@kkc/core/config/tuning.ts";
 import { sfx } from "../audio/sfx.ts";
-import { Game } from "@kkc/core/sim/gameState.ts";
+import { GameRunner } from "@kkc/core/replay/runner.ts";
+import { SaveManager } from "@kkc/core/progress/save.ts";
 import { LEVEL_LABEL } from "@kkc/core/model/body.ts";
 
-export function installTuningPanel(game: Game) {
+export function installTuningPanel(runner: GameRunner, save: SaveManager) {
+  const game = runner.game;
   const root = document.getElementById("tuning")!;
   const rows = root.querySelector(".rows") as HTMLElement;
   const title = document.getElementById("tuningTitle")!;
@@ -24,7 +26,8 @@ export function installTuningPanel(game: Game) {
   lv.value = String(game.climberLevel);
   lv.addEventListener("input", () => {
     const n = parseInt(lv.value, 10);
-    game.setClimberLevel(n);
+    runner.dispatch({ e: "climber", n }); // 走事件：级别变化也进回放 tape
+    save.setClimberLevel(n);
     lvName.textContent = lvText(n);
   });
   lvLabel.append(lvName, lv);
@@ -39,10 +42,33 @@ export function installTuningPanel(game: Game) {
   mute.checked = !sfx.isMuted;
   mute.addEventListener("change", () => {
     sfx.setMuted(!mute.checked);
+    save.setMuted(!mute.checked);
     muteName.textContent = mute.checked ? "🔊 音效/振动" : "🔇 已静音";
   });
   muteLabel.append(muteName, mute);
   rows.appendChild(muteLabel);
+
+  // 存档导出/导入（P3 前的临时入口；正式 UI 在设置页）
+  const ioLabel = document.createElement("label");
+  const mkBtn = (text: string, onClick: () => void) => {
+    const b = document.createElement("button");
+    b.textContent = text;
+    b.style.cssText = "flex:1;padding:2px 6px;cursor:pointer";
+    b.addEventListener("click", onClick);
+    return b;
+  };
+  ioLabel.append(
+    mkBtn("📤 导出存档", () => {
+      window.prompt("复制以下存档 JSON 备份：", save.export());
+    }),
+    mkBtn("📥 导入", () => {
+      const t = window.prompt("粘贴存档 JSON：");
+      if (!t) return;
+      if (save.import(t)) location.reload(); // 干净地按新档重启
+      else window.alert("存档无效，未做任何改动");
+    }),
+  );
+  rows.appendChild(ioLabel);
 
   for (const spec of TUNE_SPECS) {
     const label = document.createElement("label");

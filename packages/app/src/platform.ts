@@ -13,16 +13,12 @@ export interface GameAudio {
   readonly isMuted: boolean;
 }
 
-/** 键值存储（Web=localStorage，微信=wx storage；均为同步小数据） */
-export interface KVStorage {
-  get(key: string): string | null;
-  set(key: string, value: string): void;
-  remove(key: string): void;
-}
+import { KVStore } from "@kkc/core/progress/save.ts";
 
 export interface Platform {
   /** 单调时钟（毫秒）。仅供渲染循环节拍；逻辑层一律用固定步长帧号，禁止读墙钟 */
   now(): number;
-  storage: KVStorage;
+  /** 键值存储（Web=localStorage，微信=wx storage）；类型复用 core 存档层的 KVStore */
+  storage: KVStore;
   audio: GameAudio;
 }
