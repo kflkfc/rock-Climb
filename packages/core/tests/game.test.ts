@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { Game } from "../src/core/sim/gameState.ts";
-import { LevelDef } from "../src/core/level/levelSchema.ts";
+import { Game } from "../src/sim/gameState.ts";
+import { LevelDef } from "../src/level/levelSchema.ts";
 
 // 紧凑测试关卡：4 起始点 + 1 个手可达的终点 Jug。
 const TEST_LEVEL: LevelDef = {

@@ -1,0 +1,8 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    // ★ 刻意不含 DOM：core 引用任何浏览器 API 都会在类型检查时报错（分层强制）
+    "lib": ["ES2020"]
+  },
+  "include": ["src", "tests"]
+}

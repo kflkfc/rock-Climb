@@ -3,10 +3,10 @@
 // 朝向随前臂/小腿。肢端保留彩色把手环（可拖、辨识左右手脚）。
 
 import { Camera } from "./camera.ts";
-import { Vec2 } from "../core/math/vec2.ts";
-import { Pose, Limb } from "../core/model/skeleton.ts";
-import { Game } from "../core/sim/gameState.ts";
-import { GripMethod } from "../core/sim/grip.ts";
+import { Vec2 } from "@kkc/core/math/vec2.ts";
+import { Pose, Limb } from "@kkc/core/model/skeleton.ts";
+import { Game } from "@kkc/core/sim/gameState.ts";
+import { GripMethod } from "@kkc/core/sim/grip.ts";
 
 export const LIMB_COLOR: Record<Limb, string> = {
   LH: "#D7507E", // 左手 粉

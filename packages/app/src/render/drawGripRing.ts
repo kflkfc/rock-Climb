@@ -2,9 +2,9 @@
 // 布局函数同时供 pointer 命中测试复用。
 
 import { Camera } from "./camera.ts";
-import { Game, RingState } from "../core/sim/gameState.ts";
-import { GripOption, GRIP_LABEL } from "../core/sim/grip.ts";
-import { Vec2 } from "../core/math/vec2.ts";
+import { Game, RingState } from "@kkc/core/sim/gameState.ts";
+import { GripOption, GRIP_LABEL } from "@kkc/core/sim/grip.ts";
+import { Vec2 } from "@kkc/core/math/vec2.ts";
 
 export interface RingSlot {
   opt: GripOption;

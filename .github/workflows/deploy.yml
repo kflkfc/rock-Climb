@@ -1,4 +1,4 @@
-name: Deploy BoulderSim to GitHub Pages
+name: Deploy KingKong Climbing to GitHub Pages
 
 on:
   push:
@@ -19,22 +19,20 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: BoulderSim
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
         with:
-          node-version: 22
+          node-version: 24
           cache: npm
-          cache-dependency-path: BoulderSim/package-lock.json
+          cache-dependency-path: package-lock.json
       - run: npm ci
+      - run: npm test
       - run: npm run build
       - uses: actions/configure-pages@v6
       - uses: actions/upload-pages-artifact@v5
         with:
-          path: BoulderSim/dist
+          path: packages/platform-web/dist
 
   deploy:
     needs: build

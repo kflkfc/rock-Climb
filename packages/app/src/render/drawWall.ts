@@ -1,8 +1,8 @@
 // 米黄背景 #E6D9B5 + 按墙角 HSL 亮度 + 颗粒噪点（手绘沙岩质感）。
 
 import { Camera } from "./camera.ts";
-import { gravityComponents } from "../core/sim/physics.ts";
-import { LevelDef, wallAngleAtY } from "../core/level/levelSchema.ts";
+import { gravityComponents } from "@kkc/core/sim/physics.ts";
+import { LevelDef, wallAngleAtY } from "@kkc/core/level/levelSchema.ts";
 
 let grain: HTMLCanvasElement | null = null;
 function grainTile(): HTMLCanvasElement {

@@ -2,11 +2,11 @@
 // 做帧率无关的指数缓动，再用纯函数 resolvePose 重算 IK。
 // 解决"抓住瞬间末端瞬移 / 突然加速 / 关节弹跳"，动作自然顺滑。
 
-import { Vec2, lerp } from "../core/math/vec2.ts";
-import { Pose, Limb, LIMBS, resolvePose } from "../core/model/skeleton.ts";
-import { Game } from "../core/sim/gameState.ts";
-import { limbTarget, oriOf } from "../core/sim/physics.ts";
-import { tuning } from "../config/tuning.ts";
+import { Vec2, lerp } from "@kkc/core/math/vec2.ts";
+import { Pose, Limb, LIMBS, resolvePose } from "@kkc/core/model/skeleton.ts";
+import { Game } from "@kkc/core/sim/gameState.ts";
+import { limbTarget, oriOf } from "@kkc/core/sim/physics.ts";
+import { tuning } from "@kkc/core/config/tuning.ts";
 
 export class PoseSmoother {
   private pelvis: Vec2 | null = null;

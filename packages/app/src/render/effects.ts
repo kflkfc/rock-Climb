@@ -1,7 +1,7 @@
 // 接触波纹 / 脱手提示 / 过关彩色粒子喷射。
 
 import { Camera } from "./camera.ts";
-import { Game } from "../core/sim/gameState.ts";
+import { Game } from "@kkc/core/sim/gameState.ts";
 
 interface P {
   x: number;

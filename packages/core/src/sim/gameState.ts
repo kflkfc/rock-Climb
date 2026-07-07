@@ -34,7 +34,7 @@ import {
 } from "./physics.ts";
 import { LevelDef, wallAngleAtY } from "../level/levelSchema.ts";
 import { LEVELS } from "../level/levels.ts";
-import { tuning } from "../../config/tuning.ts";
+import { tuning } from "../config/tuning.ts";
 
 export type Status = "climbing" | "ring" | "won" | "fallen";
 

@@ -1,20 +1,22 @@
 // 引导：canvas / 60Hz 循环 / 串起 input → core → render。
 
-import { Game } from "./core/sim/gameState.ts";
-import { LEVELS, LEVEL_SEQS } from "./core/level/levels.ts";
-import { Camera } from "./render/camera.ts";
-import { drawWall } from "./render/drawWall.ts";
-import { drawHolds } from "./render/drawHolds.ts";
-import { drawReach } from "./render/drawReach.ts";
-import { drawCharacter } from "./render/drawCharacter.ts";
-import { drawStaminaRings } from "./render/drawStaminaRings.ts";
-import { PoseSmoother } from "./render/poseSmoother.ts";
-import { drawGripRing } from "./render/drawGripRing.ts";
-import { drawHUD, HudHit } from "./render/drawHUD.ts";
-import { burstWin, updateEffects, drawEffects } from "./render/effects.ts";
+import { Game } from "@kkc/core/sim/gameState.ts";
+import { LEVELS, LEVEL_SEQS } from "@kkc/core/level/levels.ts";
+import { Camera } from "@kkc/app/render/camera.ts";
+import { drawWall } from "@kkc/app/render/drawWall.ts";
+import { drawHolds } from "@kkc/app/render/drawHolds.ts";
+import { drawReach } from "@kkc/app/render/drawReach.ts";
+import { drawCharacter } from "@kkc/app/render/drawCharacter.ts";
+import { drawStaminaRings } from "@kkc/app/render/drawStaminaRings.ts";
+import { PoseSmoother } from "@kkc/app/render/poseSmoother.ts";
+import { drawGripRing } from "@kkc/app/render/drawGripRing.ts";
+import { drawHUD, HudHit } from "@kkc/app/render/drawHUD.ts";
+import { burstWin, updateEffects, drawEffects } from "@kkc/app/render/effects.ts";
 import { installPointer } from "./input/pointer.ts";
 import { installTuningPanel } from "./ui/tuningPanel.ts";
-import { sfx } from "./audio/sfx.ts";
+import { webPlatform } from "./webPlatform.ts";
+
+const platform = webPlatform;
 
 const canvas = document.getElementById("game") as HTMLCanvasElement;
 const ctx = canvas.getContext("2d")!;
@@ -48,15 +50,15 @@ installTuningPanel(game);
 installPointer(canvas, game, cam, () => hud);
 
 // 音效 + 振动反馈（首次用户手势内解锁 AudioContext）
-canvas.addEventListener("pointerdown", () => sfx.unlock(), { once: true });
-game.onContact = () => sfx.contact();
-game.onGrab = (match) => sfx.grab(match);
-game.onSlip = () => sfx.slip();
+canvas.addEventListener("pointerdown", () => platform.audio.unlock(), { once: true });
+game.onContact = () => platform.audio.contact();
+game.onGrab = (match) => platform.audio.grab(match);
+game.onSlip = () => platform.audio.slip();
 game.onWin = () => {
   const goal = game.holds.find((h) => h.isGoal)!;
   const s = cam.toScreen(goal.pos);
   burstWin(s.x, s.y);
-  sfx.win();
+  platform.audio.win();
 };
 
 // 键盘 1-9 切换线路（⤴ 按钮也可循环切换）
@@ -100,7 +102,7 @@ function tick(dt: number) {
 // 开发调试：允许在后台标签页（RAF 被挂起）时手动驱动一帧用于截图验证
 (window as unknown as { __tick: (dt: number) => void }).__tick = tick;
 
-let last = performance.now();
+let last = platform.now();
 function frame(now: number) {
   const dt = Math.min(0.033, (now - last) / 1000);
   last = now;

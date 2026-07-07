@@ -1,9 +1,9 @@
 // 彩色岩点 + 朝向箭头 + 投影 + 终点彩虹标识。手绘扁平 + 形状随类型变化。
 
 import { Camera } from "./camera.ts";
-import { Game } from "../core/sim/gameState.ts";
-import { Hold, HOLD_COLOR } from "../core/sim/holds.ts";
-import { LIMBS } from "../core/model/skeleton.ts";
+import { Game } from "@kkc/core/sim/gameState.ts";
+import { Hold, HOLD_COLOR } from "@kkc/core/sim/holds.ts";
+import { LIMBS } from "@kkc/core/model/skeleton.ts";
 
 // ---- 写实岩点渲染：3D 光影渐变 + 树脂磨砂质感 + 接触阴影 + 高光 + 螺栓孔 ----
 

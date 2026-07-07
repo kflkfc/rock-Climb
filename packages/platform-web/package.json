@@ -1,0 +1,16 @@
+{
+  "name": "@kkc/platform-web",
+  "private": true,
+  "version": "0.2.0",
+  "type": "module",
+  "description": "KingKong Climbing 网页壳：DOM/指针/WebAudio/localStorage/Vite 构建",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@kkc/app": "*",
+    "@kkc/core": "*"
+  }
+}

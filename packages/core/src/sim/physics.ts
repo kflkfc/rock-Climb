@@ -37,7 +37,7 @@ import {
 import { Hold } from "./holds.ts";
 import { GripMethod, gripTypeScore, contactAreaScore, directionalFit } from "./grip.ts";
 import { drain, recover } from "./stamina.ts";
-import { Tuning } from "../../config/tuning.ts";
+import { Tuning } from "../config/tuning.ts";
 
 export interface LimbState {
   attached: boolean;

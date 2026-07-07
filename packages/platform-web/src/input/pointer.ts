@@ -1,10 +1,10 @@
 // 指针/触屏 → V4 交互：选把手→拖→接触锁定→松手→抓法环→选抓法。
 // 同时处理抓法环命中、HUD 重置/退出图标命中、过关/掉落后点击重置。
 
-import { Camera } from "../render/camera.ts";
-import { Game } from "../core/sim/gameState.ts";
-import { ringLayout } from "../render/drawGripRing.ts";
-import { HudHit } from "../render/drawHUD.ts";
+import { Camera } from "@kkc/app/render/camera.ts";
+import { Game } from "@kkc/core/sim/gameState.ts";
+import { ringLayout } from "@kkc/app/render/drawGripRing.ts";
+import { HudHit } from "@kkc/app/render/drawHUD.ts";
 
 export function installPointer(
   canvas: HTMLCanvasElement,

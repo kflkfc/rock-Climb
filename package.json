@@ -1,0 +1,22 @@
+{
+  "name": "kingkong-climbing",
+  "private": true,
+  "version": "0.2.0",
+  "type": "module",
+  "description": "KingKong Climbing（金刚攀岩）— 硬核抱石模拟器 monorepo",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev -w @kkc/platform-web",
+    "build": "npm run typecheck && npm run build -w @kkc/platform-web",
+    "preview": "npm run preview -w @kkc/platform-web",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit -p packages/core/tsconfig.json && tsc --noEmit -p packages/app/tsconfig.json && tsc --noEmit -p packages/platform-web/tsconfig.json"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.3",
+    "vite": "^5.4.10",
+    "vitest": "^2.1.4"
+  }
+}

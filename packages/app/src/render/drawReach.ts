@@ -1,7 +1,7 @@
 // 拖拽时显示的半透明绿色虚线伸展圈 + 接触锁定预览高亮。
 
 import { Camera } from "./camera.ts";
-import { Game } from "../core/sim/gameState.ts";
+import { Game } from "@kkc/core/sim/gameState.ts";
 
 export function drawReach(ctx: CanvasRenderingContext2D, cam: Camera, game: Game) {
   const rc = game.reachCircle();

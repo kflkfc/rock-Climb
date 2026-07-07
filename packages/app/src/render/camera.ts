@@ -1,8 +1,8 @@
 // 摄像机：世界坐标 ↔ 屏幕坐标。固定缩放(可视宽度恒定→角色大小不变)，
 // 横向 + 纵向都跟随角色重心，墙可比屏幕更宽并横向滚动。
 
-import { Vec2, clamp } from "../core/math/vec2.ts";
-import { LevelDef } from "../core/level/levelSchema.ts";
+import { Vec2, clamp } from "@kkc/core/math/vec2.ts";
+import { LevelDef } from "@kkc/core/level/levelSchema.ts";
 
 const VIEW_W = 500; // 屏幕横向可见的世界宽度（越大可见墙面越宽、角色越小）
 

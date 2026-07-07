@@ -1,0 +1,10 @@
+{
+  "name": "@kkc/app",
+  "private": true,
+  "version": "0.2.0",
+  "type": "module",
+  "description": "KingKong Climbing 应用层：渲染/摄像机/姿态平滑（只读 core 状态，经 Canvas 上下文绘制，无 DOM 全局）",
+  "dependencies": {
+    "@kkc/core": "*"
+  }
+}

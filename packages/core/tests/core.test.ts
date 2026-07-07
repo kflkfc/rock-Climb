@@ -1,9 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { pointInPolygon, convexHull, v } from "../src/core/math/vec2.ts";
-import { solve2Bone } from "../src/core/math/ik.ts";
-import { makeHold } from "../src/core/sim/holds.ts";
-import { matchPercent, gripOptions, orientationScore } from "../src/core/sim/grip.ts";
-import { gravityComponents } from "../src/core/sim/physics.ts";
+import { pointInPolygon, convexHull, v } from "../src/math/vec2.ts";
+import { solve2Bone } from "../src/math/ik.ts";
+import { makeHold } from "../src/sim/holds.ts";
+import { matchPercent, gripOptions, orientationScore } from "../src/sim/grip.ts";
+import { gravityComponents } from "../src/sim/physics.ts";
 
 describe("几何 · 重心-支撑多边形", () => {
   const square = [v(0, 0), v(10, 0), v(10, 10), v(0, 10)];

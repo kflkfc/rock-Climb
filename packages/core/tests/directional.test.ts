@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { directionalFit, angleDiff } from "../src/core/sim/grip.ts";
-import { Game } from "../src/core/sim/gameState.ts";
-import { LevelDef } from "../src/core/level/levelSchema.ts";
+import { directionalFit, angleDiff } from "../src/sim/grip.ts";
+import { Game } from "../src/sim/gameState.ts";
+import { LevelDef } from "../src/level/levelSchema.ts";
 
 const L: LevelDef = {
   id: "t",

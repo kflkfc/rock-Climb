@@ -1,9 +1,9 @@
 // 每肢端把手周围彩色耐力环：绿→黄→红，随耐力实时变化（V4 视觉核心）。
 
 import { Camera } from "./camera.ts";
-import { Game } from "../core/sim/gameState.ts";
-import { LIMBS, Pose } from "../core/model/skeleton.ts";
-import { staminaColor } from "../core/sim/stamina.ts";
+import { Game } from "@kkc/core/sim/gameState.ts";
+import { LIMBS, Pose } from "@kkc/core/model/skeleton.ts";
+import { staminaColor } from "@kkc/core/sim/stamina.ts";
 
 const COLOR = { green: "#5F9A6A", yellow: "#E5A636", red: "#D64A47" };
 

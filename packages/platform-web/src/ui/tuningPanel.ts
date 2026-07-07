@@ -1,9 +1,9 @@
 // 调参面板：把 tuning 常数接到右上角滑块（应对"物理参数调参地狱"）。
 
-import { tuning, TUNE_SPECS } from "../config/tuning.ts";
+import { tuning, TUNE_SPECS } from "@kkc/core/config/tuning.ts";
 import { sfx } from "../audio/sfx.ts";
-import { Game } from "../core/sim/gameState.ts";
-import { LEVEL_LABEL } from "../core/model/body.ts";
+import { Game } from "@kkc/core/sim/gameState.ts";
+import { LEVEL_LABEL } from "@kkc/core/model/body.ts";
 
 export function installTuningPanel(game: Game) {
   const root = document.getElementById("tuning")!;

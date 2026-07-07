@@ -1,0 +1,12 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    // DOM 仅为 CanvasRenderingContext2D 等类型；运行时不得触碰 window/document（微信端复用此层）
+    "lib": ["ES2020", "DOM"],
+    "baseUrl": "../..",
+    "paths": {
+      "@kkc/core/*": ["packages/core/src/*"]
+    }
+  },
+  "include": ["src"]
+}

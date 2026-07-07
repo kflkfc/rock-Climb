@@ -2,8 +2,8 @@
 // 返回可点击图标的屏幕矩形，供 pointer 命中测试。
 
 import { Camera } from "./camera.ts";
-import { Game } from "../core/sim/gameState.ts";
-import { isBalanced } from "../core/sim/physics.ts";
+import { Game } from "@kkc/core/sim/gameState.ts";
+import { isBalanced } from "@kkc/core/sim/physics.ts";
 
 export interface HudHit {
   reset: { x: number; y: number; r: number };
