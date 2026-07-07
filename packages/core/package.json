@@ -3,5 +3,8 @@
   "private": true,
   "version": "0.2.0",
   "type": "module",
-  "description": "KingKong Climbing 确定性纯逻辑内核（零 DOM 零平台 API，可移植 Web/微信/Node）"
+  "description": "KingKong Climbing 确定性纯逻辑内核（零 DOM 零平台 API，可移植 Web/微信/Node）",
+  "devDependencies": {
+    "@types/node": "^26.1.0"
+  }
 }

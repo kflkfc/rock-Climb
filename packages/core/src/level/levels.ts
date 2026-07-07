@@ -4,6 +4,7 @@
 import { LevelDef, HoldDef } from "./levelSchema.ts";
 import { Limb } from "../model/skeleton.ts";
 import { HoldType } from "../sim/holds.ts";
+import { dcos, dhypot } from "../math/dmath.ts";
 
 const WORLD_W = 720;
 const WORLD_H = 1000;
@@ -18,14 +19,14 @@ function sampleRail(poly: Pt[], n: number, bias = 0): Pt[] {
   const segLen: number[] = [];
   let total = 0;
   for (let i = 1; i < poly.length; i++) {
-    const l = Math.hypot(poly[i].x - poly[i - 1].x, poly[i].y - poly[i - 1].y);
+    const l = dhypot(poly[i].x - poly[i - 1].x, poly[i].y - poly[i - 1].y);
     segLen.push(l);
     total += l;
   }
   const out: Pt[] = [];
   for (let k = 0; k < n; k++) {
     const lin = k / (n - 1);
-    const ease = (1 - Math.cos(Math.PI * lin)) / 2; // 两端导数0 → 两端密、中间稀
+    const ease = (1 - dcos(Math.PI * lin)) / 2; // 两端导数0 → 两端密、中间稀
     const u = lin + bias * (ease - lin);
     let d = total * u;
     let i = 0;

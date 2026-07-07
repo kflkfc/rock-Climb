@@ -1,0 +1,9 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    // 测试跑在 Node（vitest），可用 node API；src 的纯净性由 tsconfig.json 单独保证
+    "lib": ["ES2020"],
+    "types": ["node"]
+  },
+  "include": ["src", "tests"]
+}

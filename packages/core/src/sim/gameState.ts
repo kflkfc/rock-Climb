@@ -35,6 +35,7 @@ import {
 import { LevelDef, wallAngleAtY } from "../level/levelSchema.ts";
 import { LEVELS } from "../level/levels.ts";
 import { tuning } from "../config/tuning.ts";
+import { datan2 } from "../math/dmath.ts";
 
 export type Status = "climbing" | "ring" | "won" | "fallen";
 
@@ -78,6 +79,7 @@ export class Game {
   private recAccum = 0;
   onWin?: () => void;
   onSlip?: () => void;
+  onFall?: () => void; // 整体掉落（≠单肢滑脱）：音效/存档 attempts 计数用
   onContact?: () => void;
   onGrab?: (match: number) => void;
 
@@ -245,7 +247,7 @@ export class Game {
     const contact = clampLen(sub(this.dragPos, hold.pos), hold.radius);
     const contactDist = len(contact);
     const root = this.c.pose.limb[l].root;
-    const pullRad = Math.atan2(root.y - hold.pos.y, root.x - hold.pos.x);
+    const pullRad = datan2(root.y - hold.pos.y, root.x - hold.pos.x);
     // 接触波纹特效
     this.rippleAt = { ...hold.pos };
     this.rippleT = 0;
@@ -275,6 +277,14 @@ export class Game {
     this.commitGrip(limb, hold, grip, contactDist);
     this.ring = null;
     this.status = "climbing";
+  }
+
+  /** 按抓法环选项序号选定（回放事件的稳定引用；options 顺序确定）。序号越界=取消 */
+  chooseGripByIndex(i: number) {
+    if (!this.ring) return;
+    const opt = this.ring.options[i];
+    if (opt) this.chooseGrip(opt);
+    else this.cancelRing();
   }
 
   cancelRing() {
@@ -355,6 +365,7 @@ export class Game {
         if (r.fell || this.c.fallen) {
           this.status = "fallen";
           this.fallTimer = 0;
+          this.onFall?.();
         }
       }
     }

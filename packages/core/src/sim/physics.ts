@@ -38,6 +38,7 @@ import { Hold } from "./holds.ts";
 import { GripMethod, gripTypeScore, contactAreaScore, directionalFit } from "./grip.ts";
 import { drain, recover } from "./stamina.ts";
 import { Tuning } from "../config/tuning.ts";
+import { dsin, dcos, datan2, dpow, dhypot } from "../math/dmath.ts";
 
 export interface LimbState {
   attached: boolean;
@@ -102,7 +103,7 @@ export function limbTarget(c: Climber, l: Limb): Vec2 {
 /** 墙角 → 重力沿墙/垂墙分量系数。vertical(90°)=全沿墙。 */
 export function gravityComponents(wallAngleDeg: number): { para: number; perp: number } {
   const r = (wallAngleDeg * Math.PI) / 180;
-  return { para: Math.abs(Math.sin(r)), perp: Math.abs(Math.cos(r)) };
+  return { para: Math.abs(dsin(r)), perp: Math.abs(dcos(r)) };
 }
 
 /**
@@ -176,7 +177,7 @@ function solvePelvis(c: Climber, dt: number, t: Tuning) {
   }
 
   c.pelvisVel = add(c.pelvisVel, scale(accel, dt));
-  c.pelvisVel = scale(c.pelvisVel, Math.pow(t.pelvisDamp, dt * 60)); // 阻尼
+  c.pelvisVel = scale(c.pelvisVel, dpow(t.pelvisDamp, dt * 60)); // 阻尼
   c.pelvis = add(c.pelvis, scale(c.pelvisVel, dt));
 
   // 安全硬钳制（较松 1.18×，仅防跑飞）：触限时吸收沿约束方向的速度，避免抖
@@ -213,8 +214,8 @@ function solvePelvis(c: Climber, dt: number, t: Tuning) {
 function solveOrientation(c: Climber, dt: number, t: Tuning) {
   const tg = targetsOf(c);
   const lim = t.rotLimit;
-  const shoulderTgt = clamp(Math.atan2(tg.RH.y - tg.LH.y, tg.RH.x - tg.LH.x), -lim, lim);
-  const hipTgt = clamp(Math.atan2(tg.RF.y - tg.LF.y, tg.RF.x - tg.LF.x), -lim, lim);
+  const shoulderTgt = clamp(datan2(tg.RH.y - tg.LH.y, tg.RH.x - tg.LH.x), -lim, lim);
+  const hipTgt = clamp(datan2(tg.RF.y - tg.LF.y, tg.RF.x - tg.LF.x), -lim, lim);
 
   // 脊柱方向（脚→头）由支撑几何决定，可大幅倾斜乃至倒挂：
   //  - 手脚都抓：脊柱 = 支撑脚质心 → 支撑手质心
@@ -237,14 +238,14 @@ function solveOrientation(c: Climber, dt: number, t: Tuning) {
     const fc = cen(feet);
     const ux = hc.x - fc.x;
     const uy = hc.y - fc.y;
-    if (Math.hypot(ux, uy) > 1e-3) leanTgt = Math.atan2(ux, -uy); // rotate(UP,leanTgt)≈脚→手方向
+    if (dhypot(ux, uy) > 1e-3) leanTgt = datan2(ux, -uy); // rotate(UP,leanTgt)≈脚→手方向
   } else if (hands.length > 0) {
     leanTgt = 0; // 吊臂：直挂手下
   } else if (feet.length > 0) {
     leanTgt = Math.PI; // 蝙蝠挂：倒挂脚下（头朝下）
   }
 
-  const k = 1 - Math.pow(1 - t.rotFollow, dt * 60);
+  const k = 1 - dpow(1 - t.rotFollow, dt * 60);
   c.shoulderTwist += (shoulderTgt - c.shoulderTwist) * k;
   c.hipTwist += (hipTgt - c.hipTwist) * k;
   // lean 取最短角差缓动（允许大角度/倒置，过零不抖）
@@ -257,7 +258,7 @@ function solveOrientation(c: Climber, dt: number, t: Tuning) {
 /** 各肢端连续弯曲量缓动到几何期望符号 → 肘/膝换侧"经过伸直"平滑旋转，不突变。 */
 function updateBend(c: Climber, dt: number) {
   const tgt = desiredBend(c.body, c.pelvis, oriOf(c), targetsOf(c));
-  const k = 1 - Math.pow(1 - 0.14, dt * 60); // ~0.1s 旋转过渡
+  const k = 1 - dpow(1 - 0.14, dt * 60); // ~0.1s 旋转过渡
   for (const l of LIMBS) c.bend[l] += (tgt[l] - c.bend[l]) * k;
 }
 
@@ -265,7 +266,7 @@ function updateBend(c: Climber, dt: number) {
 function updatePullBlend(c: Climber, dt: number) {
   const moving = !c.limbs.LH.attached || !c.limbs.RH.attached;
   const target = moving ? 1 : 0;
-  const k = 1 - Math.pow(1 - 0.1, dt * 60);
+  const k = 1 - dpow(1 - 0.1, dt * 60);
   c.pullBlend += (target - c.pullBlend) * k;
 }
 
@@ -332,9 +333,9 @@ function handTension(c: Climber, l: Limb, loadAngle: number): number {
   const other: Limb = l === "LH" ? "RH" : "LH";
   const os = c.limbs[other];
   if (!os.attached || !os.hold) return 0;
-  const oa = Math.atan2(c.pose.com.y - os.hold.pos.y, c.pose.com.x - os.hold.pos.x);
-  const hx1 = Math.cos(loadAngle);
-  const hx2 = Math.cos(oa);
+  const oa = datan2(c.pose.com.y - os.hold.pos.y, c.pose.com.x - os.hold.pos.x);
+  const hx1 = dcos(loadAngle);
+  const hx2 = dcos(oa);
   return hx1 * hx2 < 0 ? Math.min(Math.abs(hx1), Math.abs(hx2)) * 30 : 0;
 }
 
@@ -424,11 +425,11 @@ export function stepClimber(
     // 方向对齐（每帧实时）：手悬向重心 / 脚撑离重心 的受力轴 vs 岩点可用方向锥。
     // 身体（重心）位置/旋转改变受力轴 → 错向则 align 低 → 抓力骤降、耐力急耗。
     const loadAngle = isHand(l)
-      ? Math.atan2(com.y - hold.pos.y, com.x - hold.pos.x)
-      : Math.atan2(hold.pos.y - com.y, hold.pos.x - com.x);
+      ? datan2(com.y - hold.pos.y, com.x - hold.pos.x)
+      : datan2(hold.pos.y - com.y, hold.pos.x - com.x);
     const align = directionalFit(loadAngle, hold.pullDir, hold.pullTol);
     st.align = align;
-    const alignEff = Math.pow(align, t.dirPenalty);
+    const alignEff = dpow(align, t.dirPenalty);
 
     const adapt = gripTypeScore(hold.type, st.grip!);
     const baseMatch = adapt * contactAreaScore(st.contactDist, hold.radius);
