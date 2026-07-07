@@ -41,7 +41,7 @@ export const tuning: Tuning = {
   staminaRecover: 0.5,
   imbalanceDrain: 0.9,
   maxForceK: 1.0,
-  reachSlack: 1.0,
+  reachSlack: 1.1,
   fallResetDelay: 1.1,
   dirPenalty: 1.3,
   tensionCost: 0.6,

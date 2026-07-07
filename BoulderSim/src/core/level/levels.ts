@@ -1,5 +1,5 @@
 // 纯逻辑 · 6 条关卡（V1 直壁 / V2 横移 / V3 上下 / V4 特定动作 / V5 仰角+直壁 / V6 屋檐倒挂）。
-// 用"轨道采样"生成器：手轨/脚轨沿折线按步长布点，相邻同肢移动在臂/腿可达内 → 保证可解。
+// 单轨共用生成器：一条岩点轨道，手先用、脚随后踩同一批点（贴近真实抱石，密度减半→稀疏）。
 
 import { LevelDef, HoldDef } from "./levelSchema.ts";
 import { Limb } from "../model/skeleton.ts";
@@ -13,8 +13,8 @@ interface Pt {
   y: number;
 }
 
-/** 沿折线按弧长等分采样 n 个点。 */
-function sampleRail(poly: Pt[], n: number): Pt[] {
+/** 沿折线采样 n 个点。bias>0 → 两端(起手/终点)更密、中段更稀（两端够不远需密以可解）。 */
+function sampleRail(poly: Pt[], n: number, bias = 0): Pt[] {
   const segLen: number[] = [];
   let total = 0;
   for (let i = 1; i < poly.length; i++) {
@@ -24,15 +24,17 @@ function sampleRail(poly: Pt[], n: number): Pt[] {
   }
   const out: Pt[] = [];
   for (let k = 0; k < n; k++) {
-    let d = (total * k) / (n - 1);
+    const lin = k / (n - 1);
+    const ease = (1 - Math.cos(Math.PI * lin)) / 2; // 两端导数0 → 两端密、中间稀
+    const u = lin + bias * (ease - lin);
+    let d = total * u;
     let i = 0;
     while (i < segLen.length && d > segLen[i]) {
       d -= segLen[i];
       i++;
     }
-    if (i >= segLen.length) {
-      out.push({ ...poly[poly.length - 1] });
-    } else {
+    if (i >= segLen.length) out.push({ ...poly[poly.length - 1] });
+    else {
       const t = segLen[i] < 1e-6 ? 0 : d / segLen[i];
       out.push({
         x: poly[i].x + (poly[i + 1].x - poly[i].x) * t,
@@ -49,74 +51,64 @@ interface RouteCfg {
   grade: string;
   wallAngleDeg: number;
   wallAngleTop?: number;
-  handRail: Pt[]; // 手轨折线
-  footRail: Pt[]; // 脚轨折线
-  nHand: number; // 手点数
-  nFoot: number; // 脚点数
-  zig?: number; // 左右交替偏移幅度
-  handType?: (i: number, n: number) => Partial<HoldDef>; // 指定手点类型/朝向
-  footType?: (i: number, n: number) => Partial<HoldDef>;
+  rail: Pt[]; // 单条轨道折线（r0=起手底端 → 末端=终点）
+  n: number; // 岩点数
+  zig?: number; // 左右交替偏移
+  bias?: number; // 采样偏置（两端密中段稀）
+  holdType?: (i: number, n: number) => Partial<HoldDef>;
   starThreshold?: number;
 }
 
-/** 生成一条可攀线路 + 验证用攀爬序列。手点 h0..、脚点 f0..，起手用各前 2 点。 */
+/**
+ * 单轨共用：r0..r_{n-1}。起手 脚=r0,r1 手=r2,r3。
+ * 每轮：两手上移 2 → 两脚踩到手刚离开的点。手摸到末点(goal)即完攀。
+ */
 function buildRoute(cfg: RouteCfg): { level: LevelDef; seq: [Limb, string][] } {
-  const zig = cfg.zig ?? 26;
-  const hp = sampleRail(cfg.handRail, cfg.nHand);
-  const fp = sampleRail(cfg.footRail, cfg.nFoot);
-  const holds: HoldDef[] = [];
+  const zig = cfg.zig ?? 28;
+  const rail = sampleRail(cfg.rail, cfg.n, cfg.bias ?? 0.35);
+  const N = rail.length;
+  const rid = (i: number) => (i === N - 1 ? "goal" : `r${i}`);
+  const startOf: Record<number, Limb> = { 0: "LF", 1: "RF", 2: "LH", 3: "RH" };
 
-  for (let i = 0; i < hp.length; i++) {
-    const side = i % 2 === 0 ? -1 : 1;
-    const goal = i === hp.length - 1;
-    const extra = cfg.handType ? cfg.handType(i, hp.length) : {};
-    holds.push({
-      id: goal ? "goal" : `h${i}`,
+  const holds: HoldDef[] = rail.map((p, i) => {
+    const goal = i === N - 1;
+    const extra = cfg.holdType ? cfg.holdType(i, N) : {};
+    return {
+      id: rid(i),
       type: (extra.type ?? "jug") as HoldType,
-      x: Math.round(hp[i].x + side * zig),
-      y: Math.round(hp[i].y),
+      x: Math.round(p.x + (i % 2 === 0 ? -1 : 1) * zig),
+      y: Math.round(p.y),
       ...(goal ? { goal: true, radius: 24 } : {}),
       ...extra,
-      ...(i === 0 ? { start: "LH" as Limb } : i === 1 ? { start: "RH" as Limb } : {}),
-    });
-  }
-  for (let i = 0; i < fp.length; i++) {
-    const side = i % 2 === 0 ? -1 : 1;
-    const extra = cfg.footType ? cfg.footType(i, fp.length) : {};
-    holds.push({
-      id: `f${i}`,
-      type: (extra.type ?? "jug") as HoldType,
-      x: Math.round(fp[i].x + side * zig * 0.7),
-      y: Math.round(fp[i].y),
-      ...extra,
-      ...(i === 0 ? { start: "LF" as Limb } : i === 1 ? { start: "RF" as Limb } : {}),
-    });
-  }
+      ...(startOf[i] ? { start: startOf[i] } : {}),
+    };
+  });
 
-  // 攀爬序列：每轮先两手上、再两脚上（脚滞后手约一轮）→ 稳定，末手抓终点
+  // 攀爬序列
   const seq: [Limb, string][] = [];
-  const hid = (i: number) => (i === hp.length - 1 ? "goal" : `h${i}`);
-  let hi = 2;
-  let fi = 2;
+  const handLimb = (i: number): Limb => (i % 2 === 0 ? "LH" : "RH");
+  const footLimb = (i: number): Limb => (i % 2 === 0 ? "LF" : "RF");
+  let base = 0; // 脚在 base,base+1；手在 base+2,base+3
   let guard = 0;
-  while ((hi < hp.length || fi < fp.length) && guard++ < 60) {
-    if (hi < hp.length) {
-      seq.push([hi % 2 === 0 ? "LH" : "RH", hid(hi)]);
-      if (hid(hi) === "goal") break;
-      hi++;
-      if (hi < hp.length) {
-        seq.push([hi % 2 === 0 ? "LH" : "RH", hid(hi)]);
-        if (hid(hi) === "goal") break;
-        hi++;
-      }
+  while (guard++ < 80) {
+    const h1 = base + 4;
+    const h2 = base + 5;
+    if (h1 <= N - 1) {
+      seq.push([handLimb(h1), rid(h1)]);
+      if (h1 === N - 1) break;
     }
-    if (fi < fp.length) {
-      seq.push([fi % 2 === 0 ? "LF" : "RF", `f${fi}`]);
-      fi++;
-      if (fi < fp.length) {
-        seq.push([fi % 2 === 0 ? "LF" : "RF", `f${fi}`]);
-        fi++;
-      }
+    if (h2 <= N - 1) {
+      seq.push([handLimb(h2), rid(h2)]);
+      if (h2 === N - 1) break;
+    }
+    // 脚踩到手刚离开的点 base+2, base+3
+    seq.push([footLimb(base + 2), rid(base + 2)]);
+    if (base + 3 <= N - 1) seq.push([footLimb(base + 3), rid(base + 3)]);
+    base += 2;
+    if (base + 4 > N - 1) {
+      // 收尾：把还没摸到终点的最后一手送到 goal
+      if (rid(N - 1) === "goal") seq.push([handLimb(N - 1), "goal"]);
+      break;
     }
   }
 
@@ -135,18 +127,74 @@ function buildRoute(cfg: RouteCfg): { level: LevelDef; seq: [Limb, string][] } {
   return { level, seq };
 }
 
+/** 屋檐倒挂：两排横移（脚踩上排 y小、手抓下排 y大 → 头下脚上）。右移 shuffle。 */
+function buildRoof(cfg: {
+  id: string;
+  name: string;
+  grade: string;
+  wallAngleDeg: number;
+  cols: number;
+  x0: number;
+  x1: number;
+  footY: number;
+  handY: number;
+  starThreshold?: number;
+}): { level: LevelDef; seq: [Limb, string][] } {
+  const { cols } = cfg;
+  const step = (cfg.x1 - cfg.x0) / (cols - 1);
+  const holds: HoldDef[] = [];
+  for (let c = 0; c < cols; c++) {
+    const x = Math.round(cfg.x0 + c * step);
+    holds.push({
+      id: `f${c}`,
+      type: "jug",
+      x,
+      y: cfg.footY,
+      ...(c === 0 ? { start: "LF" as Limb } : c === 1 ? { start: "RF" as Limb } : {}),
+    });
+    const goal = c === cols - 1;
+    holds.push({
+      id: goal ? "goal" : `h${c}`,
+      type: "jug",
+      x,
+      y: cfg.handY,
+      ...(goal ? { goal: true, radius: 24 } : {}),
+      ...(c === 0 ? { start: "LH" as Limb } : c === 1 ? { start: "RH" as Limb } : {}),
+    });
+  }
+  const hid = (c: number) => (c === cols - 1 ? "goal" : `h${c}`);
+  const seq: [Limb, string][] = [];
+  for (let c = 2; c < cols; c++) {
+    seq.push(["RH", hid(c)]);
+    if (c === cols - 1) break;
+    seq.push(["RF", `f${c}`]);
+    seq.push(["LH", hid(c - 1)]);
+    seq.push(["LF", `f${c - 1}`]);
+  }
+  const level: LevelDef = {
+    id: cfg.id,
+    name: cfg.name,
+    grade: cfg.grade,
+    wallAngleDeg: cfg.wallAngleDeg,
+    worldWidth: WORLD_W,
+    worldHeight: WORLD_H,
+    holds,
+    goalHoldId: "goal",
+    starThreshold: cfg.starThreshold ?? seq.length,
+  };
+  return { level, seq };
+}
+
 // ---- V1 KLIFR：基本垂直，15 点 ----
 const V1 = buildRoute({
   id: "v1",
   name: "KLIFR",
   grade: "V1",
   wallAngleDeg: 90,
-  handRail: [{ x: 360, y: 560 }, { x: 360, y: 235 }],
-  footRail: [{ x: 360, y: 770 }, { x: 360, y: 500 }],
-  nHand: 9,
-  nFoot: 6,
-  zig: 32,
-  handType: (i, n) => (i === 3 ? { type: "crimp", pullDirDeg: 90 } : i === n - 3 ? { type: "sloper", radius: 28 } : {}),
+  rail: [{ x: 360, y: 850 }, { x: 360, y: 110 }],
+  n: 15,
+  zig: 34,
+  holdType: (i, n) => (i === 5 ? { type: "crimp", pullDirDeg: 90 } : i === n - 4 ? { type: "sloper", radius: 28 } : {}),
 });
 
 // ---- V2 SKÁ：45°+ 斜向横移，20 点 ----
@@ -155,76 +203,75 @@ const V2 = buildRoute({
   name: "SKÁ",
   grade: "V2",
   wallAngleDeg: 90,
-  handRail: [{ x: 150, y: 540 }, { x: 560, y: 250 }],
-  footRail: [{ x: 175, y: 730 }, { x: 560, y: 445 }],
-  nHand: 11,
-  nFoot: 9,
-  zig: 16,
-  handType: (i) => (i === 4 || i === 7 ? { type: "crimp", pullDirDeg: 180, pullTolDeg: 75 } : {}),
+  rail: [{ x: 120, y: 850 }, { x: 620, y: 150 }], // Δx500 Δy700 → 与竖直夹角 55°
+  n: 20,
+  zig: 20,
+  holdType: (i) => (i === 8 || i === 12 ? { type: "crimp", pullDirDeg: 180, pullTolDeg: 75 } : {}),
 });
 
-// ---- V3 HVELF：先上后下（拱形），30 点 ----
+// ---- V3 HVELF：先上后下拱形，30 点 ----
 const V3 = buildRoute({
   id: "v3",
   name: "HVELF",
   grade: "V3",
   wallAngleDeg: 90,
-  handRail: [{ x: 250, y: 520 }, { x: 265, y: 275 }, { x: 400, y: 225 }, { x: 535, y: 275 }, { x: 550, y: 500 }],
-  footRail: [{ x: 250, y: 710 }, { x: 285, y: 455 }, { x: 400, y: 410 }, { x: 515, y: 455 }, { x: 550, y: 690 }],
-  nHand: 16,
-  nFoot: 14,
+  // 拱形：左侧上升 → 顶部 → 右侧平缓下降（浅角度，身体只是后倾、不头下脚上倒挂）
+  rail: [
+    { x: 175, y: 830 },
+    { x: 205, y: 250 },
+    { x: 340, y: 160 },
+    { x: 500, y: 235 },
+    { x: 600, y: 370 },
+  ],
+  n: 24,
   zig: 16,
+  bias: 0, // 均匀，避免中段步子过大够不到
 });
 
-// ---- V4 GASTON：指定动作（侧拉/下扣 crux 才能过），20 点 ----
+// ---- V4 GASTON：方向 crux（侧拉→下扣→侧拉），16 点 ----
 const V4 = buildRoute({
   id: "v4",
   name: "GASTON",
   grade: "V4",
   wallAngleDeg: 95,
-  handRail: [{ x: 360, y: 560 }, { x: 360, y: 220 }],
-  footRail: [{ x: 360, y: 745 }, { x: 360, y: 465 }],
-  nHand: 11,
-  nFoot: 9,
-  zig: 30,
-  // crux：中段三个方向点——右侧拉→下扣→左侧拉，逼迫偏身/张力才能吃住
-  handType: (i) => {
-    if (i === 4) return { type: "crimp", pullDirDeg: 180, pullTolDeg: 50 };
-    if (i === 5) return { type: "crimp", pullDirDeg: -90, pullTolDeg: 50 };
-    if (i === 6) return { type: "crimp", pullDirDeg: 0, pullTolDeg: 50 };
+  rail: [{ x: 360, y: 820 }, { x: 360, y: 150 }],
+  n: 16,
+  zig: 34,
+  holdType: (i) => {
+    if (i === 7) return { type: "crimp", pullDirDeg: 180, pullTolDeg: 50 };
+    if (i === 8) return { type: "crimp", pullDirDeg: -90, pullTolDeg: 50 };
+    if (i === 9) return { type: "crimp", pullDirDeg: 0, pullTolDeg: 50 };
     return {};
   },
-  starThreshold: 16,
+  starThreshold: 14,
 });
 
-// ---- V5 ÞAK：底部直壁 → 顶部大仰角（变墙角），24 点 ----
+// ---- V5 ÞAK：底部直壁 → 顶部大仰角（变墙角），16 点 ----
 const V5 = buildRoute({
   id: "v5",
   name: "ÞAK",
   grade: "V5",
   wallAngleDeg: 90,
   wallAngleTop: 138,
-  handRail: [{ x: 360, y: 600 }, { x: 360, y: 190 }],
-  footRail: [{ x: 360, y: 790 }, { x: 360, y: 430 }],
-  nHand: 13,
-  nFoot: 11,
-  zig: 30,
-  handType: (i, n) => (i >= n - 5 ? { type: "jug", radius: 22 } : {}), // 顶部仰角段用大水罐好抓
+  rail: [{ x: 360, y: 850 }, { x: 360, y: 150 }],
+  n: 16,
+  zig: 32,
+  bias: 0.3,
+  holdType: (i, n) => (i >= n - 6 ? { type: "jug", radius: 22 } : {}), // 顶部仰角段大水罐好抓
 });
 
-// ---- V6 HVOLF：屋檐倒挂横移（脚在上排、手在下排，头下脚上），20 点 ----
-const V6 = buildRoute({
+// ---- V6 HVOLF：屋檐倒挂横移（脚上手下、头下脚上），14 点 ----
+const V6 = buildRoof({
   id: "v6",
   name: "HVOLF",
   grade: "V6",
   wallAngleDeg: 170,
-  // 手轨在下(y大)、脚轨在上(y小) → 倒挂；横向从左到右
-  handRail: [{ x: 210, y: 430 }, { x: 560, y: 430 }],
-  footRail: [{ x: 210, y: 305 }, { x: 560, y: 305 }],
-  nHand: 10,
-  nFoot: 10,
-  zig: 8,
-  starThreshold: 14,
+  cols: 7, // 7 列 × (脚+手) = 14 点
+  x0: 190,
+  x1: 560,
+  footY: 300, // 脚踩上排
+  handY: 430, // 手抓下排
+  starThreshold: 12,
 });
 
 export const LEVEL_V1 = V1.level;
@@ -243,7 +290,7 @@ export const LEVELS: LevelDef[] = [
   LEVEL_V6,
 ];
 
-/** 开发/测试用：各关的一条参考攀爬序列。 */
+/** 开发/测试用：各关一条参考攀爬序列。 */
 export const LEVEL_SEQS: Record<string, [Limb, string][]> = {
   v1: V1.seq,
   v2: V2.seq,
