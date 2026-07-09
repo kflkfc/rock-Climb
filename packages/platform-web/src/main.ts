@@ -63,6 +63,7 @@ canvas.addEventListener("pointerdown", () => platform.audio.unlock(), { once: tr
 game.onContact = () => platform.audio.contact();
 game.onGrab = (match) => platform.audio.grab(match);
 game.onSlip = () => platform.audio.slip();
+game.onDyno = () => platform.audio.dyno();
 game.onFall = () => save.recordAttempt(game.level.id);
 game.onWin = () => {
   const goal = game.holds.find((h) => h.isGoal)!;

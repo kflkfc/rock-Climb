@@ -81,6 +81,9 @@ export interface Climber {
   pelvisVel: Vec2;
   /** 混合法③：自由肢端 Verlet 上一帧位置（次级摆动：悬腿会荡、跟随身体） */
   freePrev: Record<Limb, Vec2>;
+  /** Dyno 腾空状态（null=不在腾空）。t 累计秒；window 内需抓到点否则坠落；
+   *  excluded = 起跳时释放的岩点 id（本次腾空不可重抓，否则永远飞不出去） */
+  dyno: { t: number; leadLimb: Limb; excluded: string[] } | null;
 }
 
 /** 由 Climber 构造姿态解算所需的朝向对象 */
@@ -88,8 +91,19 @@ export function oriOf(c: Climber): Orientation {
   return { lean: c.lean, shoulderTwist: c.shoulderTwist, hipTwist: c.hipTwist };
 }
 
+/** 脱手归因（HUD 教学提示：把物理黑盒变成可学习的规则） */
+export type SlipReason = "stamina" | "overload" | "direction" | "imbalance";
+
+export const SLIP_REASON_LABEL: Record<SlipReason, string> = {
+  stamina: "耐力耗尽",
+  overload: "超出抓力上限",
+  direction: "受力方向错误",
+  imbalance: "失衡过久",
+};
+
 export interface StepResult {
   slipped: Limb[];
+  slipReasons: Partial<Record<Limb, SlipReason>>;
   fell: boolean;
   balanced: boolean;
   comInside: boolean;
@@ -339,16 +353,26 @@ function solveFreeLimbs(c: Climber, dt: number, t: Tuning) {
   }
 }
 
-/** 双手受力方向水平相反时的张力需求（夹在两个侧向点之间需主动对抗）。 */
-function handTension(c: Climber, l: Limb, loadAngle: number): number {
-  if (!isHand(l)) return 0;
-  const other: Limb = l === "LH" ? "RH" : "LH";
-  const os = c.limbs[other];
-  if (!os.attached || !os.hold) return 0;
-  const oa = datan2(c.pose.com.y - os.hold.pos.y, c.pose.com.x - os.hold.pos.x);
+/**
+ * 全身张力对抗度 0..1（P1）：本肢与其它"拉"型肢端（手 / 勾脚 / 挂脚）受力方向
+ * 水平相反的程度。夹在两个侧向点之间 / 屋檐手脚对拉都由此表达。
+ * 两面性：① 消耗——对抗需持续发力（×tensionCost）；② 收益——陡仰上对拉产生
+ * 法向压紧，提高有效抓力上限（×tensionBoost×perp×核心）。这正是屋檐挂脚的意义。
+ */
+export function oppositionOf(
+  l: Limb,
+  loadAngle: number,
+  pullAngles: Partial<Record<Limb, number>>,
+): number {
+  if (!(l in pullAngles)) return 0; // 非拉型肢端（普通蹬脚）不参与对抗
   const hx1 = dcos(loadAngle);
-  const hx2 = dcos(oa);
-  return hx1 * hx2 < 0 ? Math.min(Math.abs(hx1), Math.abs(hx2)) * 30 : 0;
+  let best = 0;
+  for (const m of Object.keys(pullAngles) as Limb[]) {
+    if (m === l) continue;
+    const hx2 = dcos(pullAngles[m]!);
+    if (hx1 * hx2 < 0) best = Math.max(best, Math.min(Math.abs(hx1), Math.abs(hx2)));
+  }
+  return best;
 }
 
 function targetsOf(c: Climber): Record<Limb, Vec2> {
@@ -370,10 +394,33 @@ export function stepClimber(
   dt: number,
   t: Tuning,
 ): StepResult {
-  const res: StepResult = { slipped: [], fell: false, balanced: true, comInside: true };
+  const res: StepResult = {
+    slipped: [],
+    slipReasons: {},
+    fell: false,
+    balanced: true,
+    comInside: true,
+  };
   for (const l of LIMBS) c.limbs[l].slipping = false;
   if (c.fallen) {
     c.pose = resolvePose(c.body, c.pelvis, oriOf(c), targetsOf(c), c.bend);
+    return res;
+  }
+
+  // ---- Dyno 腾空：纯弹道 + 肢端跟随摆动；平衡/耐力/脱手判定全部豁免 ----
+  if (c.dyno) {
+    c.dyno.t += dt;
+    c.pelvisVel = add(c.pelvisVel, scale({ x: 0, y: 1 }, t.dynoGravity * dt));
+    c.pelvis = add(c.pelvis, scale(c.pelvisVel, dt));
+    solveFreeLimbs(c, dt, t);
+    updateBend(c, dt);
+    c.pose = resolvePose(c.body, c.pelvis, oriOf(c), targetsOf(c), c.bend);
+    if (c.dyno.t > t.dynoWindow) {
+      // 窗口内没抓到任何点 → 坠落
+      c.dyno = null;
+      c.fallen = true;
+      res.fell = true;
+    }
     return res;
   }
 
@@ -426,6 +473,15 @@ export function stepClimber(
   const totalLoad = Fpara + Fperp * 0.6;
 
   const com = c.pose.com;
+
+  // 第一遍：拉型肢端（手 / 勾脚 / 挂脚）的受力角——张力对抗判定用
+  const pullAngles: Partial<Record<Limb, number>> = {};
+  for (const l of att) {
+    const st = c.limbs[l];
+    if (isHand(l) || isPullingFootGrip(st.grip))
+      pullAngles[l] = datan2(com.y - st.hold!.pos.y, com.x - st.hold!.pos.x);
+  }
+
   for (const l of att) {
     const st = c.limbs[l];
     const hold = st.hold!;
@@ -459,10 +515,11 @@ export function stepClimber(
       c.body.fingerStrength *
       t.capacity *
       t.maxForceK;
-    const effMax = maxForce * (0.3 + 0.7 * alignEff);
-
-    // 张力对抗：夹在两个方向相反的点之间需主动发力维持，叠加耐力消耗
-    const tension = handTension(c, l, loadAngle) * t.tensionCost * (1.2 - c.body.coreStability);
+    // 张力对抗（两面性）：对抗度 → 消耗；陡仰(perp↑)上对拉压紧 → 抓力增益（核心调制）
+    const oppose = oppositionOf(l, loadAngle, pullAngles);
+    const tensionRelief = 1 + t.tensionBoost * oppose * perp * (0.5 + 0.5 * c.body.coreStability);
+    const effMax = maxForce * (0.3 + 0.7 * alignEff) * tensionRelief;
+    const tension = oppose * 30 * t.tensionCost * (1.2 - c.body.coreStability);
 
     // 耐力消耗 = 负载×指力需求 ÷ 实时匹配度 × (1/指力) + 张力开销，
     // 再乘岩点类型消耗系数（gaston 肩部对抗等）、抓法消耗系数（勾脚/挂脚主动发力）
@@ -487,6 +544,9 @@ export function stepClimber(
       st.slipping = true;
       st.align = 1;
       res.slipped.push(l);
+      // 归因：耐力耗尽 / 错向导致的过载 / 单纯超载
+      res.slipReasons[l] =
+        st.stamina <= 0 ? "stamina" : alignEff < 0.55 ? "direction" : "overload";
     }
   }
 
@@ -505,6 +565,7 @@ export function stepClimber(
       st.slipping = true;
       st.align = 1;
       res.slipped.push(weakest);
+      res.slipReasons[weakest] = "imbalance";
       c.imbalanceT = 0;
     }
   }

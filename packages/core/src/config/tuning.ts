@@ -26,6 +26,12 @@ export interface Tuning {
   limbGravity: number; // 自由肢端重力（px/s²，次级摆动下坠）
   limbSwingDamp: number; // 自由肢端惯性保留 0..1（越大摆得越久）
   limbRestPull: number; // 自由肢端回到休息位的弹簧（越大越快归位、摆动越小）
+  // Dyno 动态跳跃（甩出手势触发）
+  dynoSpeedMin: number; // 触发甩跳的最小拖拽速度（世界单位/s）
+  dynoImpulse: number; // 起跳冲量基准（×爆发能力缩放）
+  dynoWindow: number; // 腾空抓取窗口（秒），超时坠落
+  dynoGravity: number; // 腾空弹道重力（px/s²，世界竖直向下）
+  tensionBoost: number; // 全身张力对抗在陡仰上的抓力增益上限系数
 }
 
 export const tuning: Tuning = {
@@ -53,6 +59,11 @@ export const tuning: Tuning = {
   limbGravity: 900,
   limbSwingDamp: 0.9,
   limbRestPull: 55,
+  dynoSpeedMin: 420,
+  dynoImpulse: 520,
+  dynoWindow: 1.15,
+  dynoGravity: 1400,
+  tensionBoost: 0.5,
 };
 
 export interface TuneSpec {
@@ -86,4 +97,9 @@ export const TUNE_SPECS: TuneSpec[] = [
   { key: "limbGravity", label: "肢端重力", min: 0, max: 2000, step: 50 },
   { key: "limbSwingDamp", label: "摆动惯性", min: 0.5, max: 0.98, step: 0.01 },
   { key: "limbRestPull", label: "回位弹簧", min: 10, max: 200, step: 5 },
+  { key: "dynoSpeedMin", label: "甩跳阈值", min: 200, max: 900, step: 10 },
+  { key: "dynoImpulse", label: "甩跳冲量", min: 200, max: 1000, step: 10 },
+  { key: "dynoWindow", label: "腾空窗口", min: 0.5, max: 2, step: 0.05 },
+  { key: "dynoGravity", label: "腾空重力", min: 600, max: 2600, step: 50 },
+  { key: "tensionBoost", label: "张力增益", min: 0, max: 1.2, step: 0.05 },
 ];

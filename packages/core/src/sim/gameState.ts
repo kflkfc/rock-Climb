@@ -25,7 +25,7 @@ import {
   Pose,
 } from "../model/skeleton.ts";
 import { Hold, makeHold, holdUsableBy } from "./holds.ts";
-import { GripOption, gripOptions, gripsFor } from "./grip.ts";
+import { GripOption, gripOptions, gripsFor, matchPercent } from "./grip.ts";
 import {
   Climber,
   LimbState,
@@ -33,6 +33,7 @@ import {
   limbTarget,
   attachedLimbs,
   reachSlackOf,
+  SlipReason,
 } from "./physics.ts";
 import { LevelDef, wallAngleAtY } from "../level/levelSchema.ts";
 import { LEVELS } from "../level/levels.ts";
@@ -74,6 +75,11 @@ export class Game {
   rippleAt: Vec2 | null = null;
   rippleT = 0;
   private fallTimer = 0;
+  /** 最近一次脱手归因（HUD 教学提示，2.2s 淡出） */
+  lastSlip: { limb: Limb; reason: SlipReason; t: number } | null = null;
+  /** 拖拽速度（世界单位/s，逻辑帧平滑）——甩出手势检测用 */
+  private dragVel: Vec2 = v();
+  private prevDragPos: Vec2 = v();
   dbg: { t: number; slipped: Limb[]; comInside: boolean; imbT: number }[] = [];
   private replay: ReplayFrame[] = [];
   private replayIdx = 0;
@@ -84,6 +90,7 @@ export class Game {
   onFall?: () => void; // 整体掉落（≠单肢滑脱）：音效/存档 attempts 计数用
   onContact?: () => void;
   onGrab?: (match: number) => void;
+  onDyno?: () => void; // 甩跳起跳瞬间（音效/特效）
 
   levelIndex = 0;
   climberLevel = 5; // 选手级别 1-10（默认 5 老手；越高越强越不易掉）
@@ -199,6 +206,7 @@ export class Game {
         LF: { ...limbs.LF.freePos },
         RF: { ...limbs.RF.freePos },
       },
+      dyno: null,
     };
     this.status = "climbing";
     this.gripCount = 0;
@@ -208,6 +216,9 @@ export class Game {
     this.hoverHold = null;
     this.rippleAt = null;
     this.fallTimer = 0;
+    this.lastSlip = null;
+    this.dragVel = v();
+    this.prevDragPos = v();
     this.replay = [];
     this.replayIdx = 0;
   }
@@ -237,6 +248,8 @@ export class Game {
     this.dragging = best;
     this.c.draggingLimb = best; // 物理不自动摆放此肢端（由拖动控制）
     this.dragPos = { ...worldPos };
+    this.prevDragPos = { ...worldPos }; // 同步基准，防拖拽首帧产生假速度（甩跳误判）
+    this.dragVel = v();
     return true;
   }
 
@@ -262,6 +275,18 @@ export class Game {
     this.c.draggingLimb = null; // 交还物理：solveFreeLimbs 柔和摆放(flag/放松悬)，不突跳
     this.hoverHold = null;
     if (!hold) {
+      // 甩出手势 → Dyno 起跳：手被快速甩向远处松开（没落在任何岩点上）
+      // = 真实抱石"甩出去够"的动作语言；速度阈值防误触
+      const speed = len(this.dragVel);
+      if (
+        isHand(l) &&
+        !this.c.dyno &&
+        speed >= tuning.dynoSpeedMin &&
+        attachedLimbs(this.c).length >= 1
+      ) {
+        this.launchDyno(l, norm(this.dragVel), speed);
+        return;
+      }
       // 未落在岩点：保持当前位置，由 solveFreeLimbs 柔和过渡到自然姿态（不突然下垂）
       return;
     }
@@ -313,6 +338,71 @@ export class Game {
     // 保持当前位置，由 solveFreeLimbs 柔和过渡到自然姿态
     this.ring = null;
     this.status = "climbing";
+  }
+
+  /** Dyno 起跳：全肢脱点，骨盆获得沿甩动方向的冲量（爆发能力缩放），进入腾空 */
+  private launchDyno(lead: Limb, dir: Vec2, speed: number) {
+    // 跳离区 = 起跳瞬间双手可达的全部点（含刚释放的）——dyno 的意义是够"现在够不到的点"
+    const excluded: string[] = [];
+    for (const l of ["LH", "RH"] as Limb[]) {
+      const root = this.c.pose.limb[l].root;
+      const reach = maxReachOf(this.c.body, l) * reachSlackOf(this.c.body, tuning);
+      for (const h of this.holds)
+        if (!excluded.includes(h.id) && dist(root, h.pos) <= reach) excluded.push(h.id);
+    }
+    for (const m of LIMBS) {
+      const st = this.c.limbs[m];
+      if (st.attached && st.hold) {
+        if (!excluded.includes(st.hold.id)) excluded.push(st.hold.id);
+        st.freePos = { ...st.hold.pos };
+        st.attached = false;
+        st.hold = null;
+        st.grip = null;
+      }
+    }
+    const power = this.c.body.power;
+    const impulse =
+      tuning.dynoImpulse * (0.55 + 0.9 * power) * Math.min(1.6, speed / tuning.dynoSpeedMin);
+    this.c.pelvisVel = add(this.c.pelvisVel, scale(dir, impulse));
+    this.c.dyno = { t: 0, leadLimb: lead, excluded };
+    this.onDyno?.();
+  }
+
+  /**
+   * 腾空拍击抓取：任一手的肩根可达范围内出现可用岩点 → 自动伸手以"拍击"抓住
+   * （免抓法环——半空中没时间选抓法，这正是 slap 匹配度低的代价）。
+   * 判定用肩根可达而非手末端：腾空中手在摆动，玩家没有微操空间，窗口要宽容。
+   */
+  private tryDynoCatch() {
+    if (!this.c.dyno) return;
+    for (const l of ["LH", "RH"] as Limb[]) {
+      const root = this.c.pose.limb[l].root;
+      const reach = maxReachOf(this.c.body, l) * reachSlackOf(this.c.body, tuning);
+      let best: Hold | null = null;
+      let bestD = Infinity;
+      for (const h of this.holds) {
+        if (!holdUsableBy(h, l)) continue;
+        if (this.c.dyno.excluded.includes(h.id)) continue; // 跳离的点不可重抓
+        const d = dist(root, h.pos);
+        if (d <= reach && d < bestD) {
+          bestD = d;
+          best = h;
+        }
+      }
+      if (!best) continue;
+      const hold = best;
+      // 落手点：从岩点中心向手根方向偏移（拍在近侧边缘，contactDist 反映仓促）
+      const contactDist = Math.min(hold.radius * 0.6, bestD * 0.1);
+      this.c.limbs[l].freePos = { ...hold.pos };
+      const pullRad = datan2(root.y - hold.pos.y, root.x - hold.pos.x);
+      const match = matchPercent({ hold, grip: "slap", distToCenter: contactDist, pullRad });
+      this.c.dyno = null;
+      this.rippleAt = { ...hold.pos };
+      this.rippleT = 0;
+      this.onContact?.();
+      this.commitGrip(l, hold, { grip: "slap", match, injury: false }, contactDist);
+      return;
+    }
   }
 
   private commitGrip(l: Limb, hold: Hold, opt: GripOption, contactDist: number) {
@@ -372,9 +462,19 @@ export class Game {
       // 抓法环弹出时物理暂停（玩家思考），其余照常步进
       if (this.status === "climbing") {
         this.recordReplay(dt);
+        // 拖拽速度（甩出手势检测）：本逻辑帧位移 → 平滑
+        if (this.dragging) {
+          const inst = scale(sub(this.dragPos, this.prevDragPos), 1 / dt);
+          this.dragVel = add(scale(this.dragVel, 0.65), scale(inst, 0.35));
+        } else {
+          this.dragVel = v();
+        }
+        this.prevDragPos = { ...this.dragPos };
+
         // 墙角按当前重心高度取（支持"底直壁→顶仰角"这类变墙角关卡）
         const wall = wallAngleAtY(this.level, this.c.pose.com.y);
         const r = stepClimber(this.c, wall, dt, tuning);
+        if (this.c.dyno) this.tryDynoCatch(); // 腾空中检查拍击抓取
         if (r.slipped.length > 0) {
           this.dbg.push({
             t: +this.time.toFixed(2),
@@ -382,6 +482,9 @@ export class Game {
             comInside: r.comInside,
             imbT: +this.c.imbalanceT.toFixed(2),
           });
+          const first = r.slipped[0];
+          if (r.slipReasons[first])
+            this.lastSlip = { limb: first, reason: r.slipReasons[first]!, t: this.time };
           this.onSlip?.();
         }
         if (r.fell || this.c.fallen) {

@@ -3,7 +3,9 @@
 
 import { Camera } from "./camera.ts";
 import { Game } from "@kkc/core/sim/gameState.ts";
-import { isBalanced } from "@kkc/core/sim/physics.ts";
+import { isBalanced, SLIP_REASON_LABEL } from "@kkc/core/sim/physics.ts";
+
+const LIMB_LABEL = { LH: "左手", RH: "右手", LF: "左脚", RF: "右脚" } as const;
 
 export interface HudHit {
   reset: { x: number; y: number; r: number };
@@ -40,12 +42,31 @@ export function drawHUD(ctx: CanvasRenderingContext2D, cam: Camera, game: Game):
   // 墙角侧视小图标（右上）
   drawWallIcon(ctx, W - 54, 20, game.level.wallAngleDeg);
 
-  // 失衡警示
-  if (game.status === "climbing" && !isBalanced(game.c)) {
+  // 失衡警示 / 腾空指示
+  if (game.status === "climbing" && game.c.dyno) {
+    ctx.textAlign = "center";
+    ctx.fillStyle = "#E5A636";
+    ctx.font = "700 18px system-ui, sans-serif";
+    ctx.fillText("🚀 腾空！抓住目标点！", W / 2, 18);
+  } else if (game.status === "climbing" && !isBalanced(game.c)) {
     ctx.textAlign = "center";
     ctx.fillStyle = "#D64A47";
     ctx.font = "700 18px system-ui, sans-serif";
     ctx.fillText("⚠ 失衡！", W / 2, 18);
+  }
+
+  // 脱手归因提示（教学性：告诉玩家"为什么掉"，2.2s 淡出）
+  if (game.lastSlip && game.time - game.lastSlip.t < 2.2) {
+    const age = game.time - game.lastSlip.t;
+    const alpha = age < 1.6 ? 1 : 1 - (age - 1.6) / 0.6;
+    ctx.textAlign = "center";
+    ctx.fillStyle = `rgba(214,74,71,${alpha})`;
+    ctx.font = "700 16px system-ui, sans-serif";
+    ctx.fillText(
+      `💥 ${LIMB_LABEL[game.lastSlip.limb]}脱手：${SLIP_REASON_LABEL[game.lastSlip.reason]}`,
+      W / 2,
+      44,
+    );
   }
 
   // 左下：重置 + 退出 圆形图标

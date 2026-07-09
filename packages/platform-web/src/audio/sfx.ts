@@ -87,6 +87,26 @@ export const sfx = {
     vibrate([20, 40, 30]);
   },
 
+  /** Dyno 起跳：快速上滑"嗖" */
+  dyno() {
+    const c = ac();
+    if (c && master) {
+      const t0 = c.currentTime;
+      const osc = c.createOscillator();
+      const g = c.createGain();
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(220, t0);
+      osc.frequency.exponentialRampToValueAtTime(880, t0 + 0.22);
+      g.gain.setValueAtTime(0.16, t0);
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.26);
+      osc.connect(g);
+      g.connect(master);
+      osc.start(t0);
+      osc.stop(t0 + 0.28);
+    }
+    vibrate([10, 20, 25]);
+  },
+
   /** 过关：上行琶音 + 节奏振动 */
   win() {
     const notes = [523, 659, 784, 1047]; // C E G C

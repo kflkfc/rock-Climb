@@ -8,6 +8,7 @@ export interface GameAudio {
   contact(): void;
   grab(match: number): void;
   slip(): void;
+  dyno(): void;
   win(): void;
   setMuted(muted: boolean): void;
   readonly isMuted: boolean;
