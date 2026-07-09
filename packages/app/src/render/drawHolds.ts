@@ -60,14 +60,34 @@ function rngFor(id: string): () => number {
   };
 }
 
-// 各类型的椭圆基准（纵横比/朝向/边缘不规则度/顶点数）
+// 各类型的椭圆基准（纵横比/朝向/边缘不规则度/顶点数）。12 类型一眼可辨的第一层：轮廓。
 function blobParams(h: Hold, r: number) {
-  if (h.type === "jug") return { rx: r * 1.14, ry: r * 0.98, ang: 0, jit: 0.2, n: 11, cy: 0 };
-  if (h.type === "crimp")
-    return { rx: r * 1.34, ry: r * 0.5, ang: h.pullDir + Math.PI / 2, jit: 0.22, n: 10, cy: 0 };
-  if (h.type === "pinch")
-    return { rx: r * 0.62, ry: r * 1.2, ang: h.pullDir - Math.PI / 2, jit: 0.18, n: 11, cy: 0 };
-  return { rx: r * 1.18, ry: r * 0.76, ang: 0, jit: 0.13, n: 12, cy: r * 0.06 }; // sloper 更圆滑
+  switch (h.type) {
+    case "jug":
+      return { rx: r * 1.14, ry: r * 0.98, ang: 0, jit: 0.2, n: 11, cy: 0 };
+    case "edge": // 更宽更平的水平棱（比 crimp 厚道）
+      return { rx: r * 1.4, ry: r * 0.58, ang: h.pullDir + Math.PI / 2, jit: 0.14, n: 10, cy: 0 };
+    case "crimp":
+      return { rx: r * 1.34, ry: r * 0.5, ang: h.pullDir + Math.PI / 2, jit: 0.22, n: 10, cy: 0 };
+    case "pinch":
+      return { rx: r * 0.62, ry: r * 1.2, ang: h.pullDir - Math.PI / 2, jit: 0.18, n: 11, cy: 0 };
+    case "pocket": // 圆鼓 + 中央指洞（洞在细节层画）
+      return { rx: r * 1.02, ry: r * 0.94, ang: 0, jit: 0.16, n: 11, cy: 0 };
+    case "mono": // 小圆 + 单指洞
+      return { rx: r * 0.95, ry: r * 0.9, ang: 0, jit: 0.14, n: 10, cy: 0 };
+    case "sidepull": // 竖长条（侧向受力）
+      return { rx: r * 0.66, ry: r * 1.3, ang: h.pullDir - Math.PI / 2, jit: 0.18, n: 11, cy: 0 };
+    case "gaston": // 竖长条 + 更棱角
+      return { rx: r * 0.7, ry: r * 1.25, ang: h.pullDir - Math.PI / 2, jit: 0.26, n: 8, cy: 0 };
+    case "undercling": // 倒扣檐（开口朝下）
+      return { rx: r * 1.3, ry: r * 0.62, ang: h.pullDir + Math.PI / 2, jit: 0.16, n: 10, cy: 0 };
+    case "volume": // 大几何体：低抖动少顶点 → 人工"大块"感
+      return { rx: r * 1.3, ry: r * 1.08, ang: 0, jit: 0.06, n: 6, cy: 0 };
+    case "footchip": // 迷你三角楔
+      return { rx: r * 1.1, ry: r * 0.72, ang: 0, jit: 0.3, n: 6, cy: 0 };
+    default: // sloper 更圆滑
+      return { rx: r * 1.18, ry: r * 0.76, ang: 0, jit: 0.13, n: 12, cy: r * 0.06 };
+  }
 }
 
 /** 生成不规则有机轮廓的顶点（确定性：每个岩点独一无二且稳定）。 */
@@ -149,10 +169,23 @@ function paintHold(ctx: CanvasRenderingContext2D, h: Hold, r: number, colHex: st
   ctx.fillRect(-r * 2, -r * 2, r * 4, r * 4);
   const pat = getSpecklePattern(ctx);
   if (pat) {
-    ctx.globalAlpha = 0.55;
+    // 材质暗示：磨砂颗粒更重，光滑近乎无颗粒
+    ctx.globalAlpha = h.material === "grippy" ? 0.85 : h.material === "slick" ? 0.18 : 0.55;
     ctx.fillStyle = pat;
     ctx.fillRect(-r * 2, -r * 2, r * 4, r * 4);
     ctx.globalAlpha = 1;
+  }
+  if (h.material === "slick") {
+    // 抛光反光带（危险信号：光滑点）
+    ctx.save();
+    ctx.rotate(-0.6);
+    const gl = ctx.createLinearGradient(0, -r * 0.5, 0, r * 0.2);
+    gl.addColorStop(0, "rgba(255,255,255,0)");
+    gl.addColorStop(0.5, "rgba(255,255,255,0.34)");
+    gl.addColorStop(1, "rgba(255,255,255,0)");
+    ctx.fillStyle = gl;
+    ctx.fillRect(-r * 1.4, -r * 0.5, r * 2.8, r * 0.7);
+    ctx.restore();
   }
   // 底部接触阴影（与墙交界的 AO）
   const ao = ctx.createLinearGradient(0, -r * 0.1, 0, r * 1.2);
@@ -177,6 +210,27 @@ function paintHold(ctx: CanvasRenderingContext2D, h: Hold, r: number, colHex: st
     ctx.fillStyle = "rgba(0,0,0,0.28)";
     ctx.fillRect(-r * 0.07, -r * 1.1, r * 0.14, r * 2.2);
     ctx.restore();
+  } else if (h.type === "pocket" || h.type === "mono") {
+    // 指洞（pocket 双指宽洞 / mono 单指小洞）——最强识别特征
+    const hw = h.type === "mono" ? r * 0.3 : r * 0.52;
+    const hg = ctx.createRadialGradient(0, 0, hw * 0.15, 0, 0, hw * 1.35);
+    hg.addColorStop(0, "rgba(0,0,0,0.78)");
+    hg.addColorStop(0.7, "rgba(0,0,0,0.5)");
+    hg.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.fillStyle = hg;
+    ctx.beginPath();
+    ctx.ellipse(0, 0, hw * 1.15, hw * 0.85, 0, 0, Math.PI * 2);
+    ctx.fill();
+  } else if (h.type === "volume") {
+    // 体积块：平面切面高光线（人工几何体感）
+    ctx.strokeStyle = "rgba(255,255,255,0.18)";
+    ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    ctx.moveTo(-r * 0.9, -r * 0.15);
+    ctx.lineTo(r * 0.2, -r * 0.75);
+    ctx.moveTo(r * 0.2, -r * 0.75);
+    ctx.lineTo(r * 0.85, r * 0.1);
+    ctx.stroke();
   }
   ctx.restore();
 
@@ -196,8 +250,8 @@ function paintHold(ctx: CanvasRenderingContext2D, h: Hold, r: number, colHex: st
   ctx.fill();
   ctx.restore();
 
-  // crimp 锋利棱线（受力反侧的尖边）
-  if (h.type === "crimp") {
+  // crimp/edge/undercling 锋利棱线（受力反侧的尖边）
+  if (h.type === "crimp" || h.type === "edge" || h.type === "undercling") {
     ctx.save();
     ctx.rotate(h.pullDir);
     ctx.beginPath();
@@ -210,8 +264,9 @@ function paintHold(ctx: CanvasRenderingContext2D, h: Hold, r: number, colHex: st
     ctx.restore();
   }
 
-  // 螺栓孔（sloper 光滑面不画）
-  if (h.type !== "sloper") drawBolt(ctx, 0, 0, Math.max(2.5, r * 0.16));
+  // 螺栓孔（sloper 光滑面 / footchip 太小 / pocket·mono 洞即视觉锚点 → 不画）
+  if (h.type !== "sloper" && h.type !== "footchip" && h.type !== "pocket" && h.type !== "mono")
+    drawBolt(ctx, 0, 0, Math.max(2.5, r * 0.16));
 
   ctx.restore();
 }

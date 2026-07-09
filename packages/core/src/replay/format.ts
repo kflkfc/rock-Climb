@@ -14,7 +14,8 @@ export type InputEvent =
   | { f: number; e: "cancelRing" }
   | { f: number; e: "reset" }
   | { f: number; e: "level"; i: number } // 切换到关卡序号 i
-  | { f: number; e: "climber"; n: number }; // 选手级别 1-10
+  | { f: number; e: "climber"; n: number } // 选手级别 1-10
+  | { f: number; e: "chara"; id: string }; // 切换角色（体格预设变化 → 重开本线）
 
 export interface Replay {
   schema: 1;
@@ -22,6 +23,8 @@ export interface Replay {
   levelId: string;
   levelIndex: number;
   climberLevel: number;
+  /** tape 起点角色（可选：缺省 = 默认攀岩者，兼容旧回放） */
+  characterId?: string;
   /** 录制时的物理调参快照（重演时临时生效，结束后还原） */
   tuning: Tuning;
   events: InputEvent[];

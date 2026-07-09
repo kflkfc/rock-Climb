@@ -13,7 +13,8 @@ import {
   dist,
   clampLen,
 } from "../math/vec2.ts";
-import { bodyForLevel } from "../model/body.ts";
+import { makeBody, abilitiesForLevel, BodyParams } from "../model/body.ts";
+import { characterById, applyBias, DEFAULT_CHARACTER_ID } from "../model/characters.ts";
 import {
   Limb,
   LIMBS,
@@ -23,7 +24,7 @@ import {
   maxReachOf,
   Pose,
 } from "../model/skeleton.ts";
-import { Hold, makeHold } from "./holds.ts";
+import { Hold, makeHold, holdUsableBy } from "./holds.ts";
 import { GripOption, gripOptions, gripsFor } from "./grip.ts";
 import {
   Climber,
@@ -31,6 +32,7 @@ import {
   stepClimber,
   limbTarget,
   attachedLimbs,
+  reachSlackOf,
 } from "./physics.ts";
 import { LevelDef, wallAngleAtY } from "../level/levelSchema.ts";
 import { LEVELS } from "../level/levels.ts";
@@ -85,16 +87,31 @@ export class Game {
 
   levelIndex = 0;
   climberLevel = 5; // 选手级别 1-10（默认 5 老手；越高越强越不易掉）
+  characterId = DEFAULT_CHARACTER_ID; // 角色阵容（体格预设 + 能力偏置）
 
   constructor(level: LevelDef) {
     this.levelIndex = Math.max(0, LEVELS.indexOf(level));
     this.load(level);
   }
 
+  /** 角色体格 + 级别能力（经角色偏置）→ 最终人体参数 */
+  private buildBody(): BodyParams {
+    const ch = characterById(this.characterId);
+    return makeBody(ch.physique, applyBias(abilitiesForLevel(this.climberLevel), ch.abilityBias));
+  }
+
   /** 设置选手级别（即时生效，不打断当前攀爬）：缩放指力/核心等能力 */
   setClimberLevel(n: number) {
     this.climberLevel = Math.max(1, Math.min(10, Math.round(n)));
-    if (this.c) this.c.body = bodyForLevel(this.climberLevel);
+    if (this.c) this.c.body = this.buildBody();
+  }
+
+  /** 切换角色：骨长变化会瞬移姿态，因此重开本条线（回放事件 chara 同语义） */
+  setCharacter(id: string) {
+    const ch = characterById(id);
+    if (ch.id === this.characterId) return;
+    this.characterId = ch.id;
+    this.reset();
   }
 
   /** 切到下一条线路（退出按钮 / 调试用） */
@@ -117,10 +134,14 @@ export class Game {
         radius: h.radius,
         pullDir: h.pullDirDeg != null ? (h.pullDirDeg * Math.PI) / 180 : undefined,
         pullTol: h.pullTolDeg != null ? (h.pullTolDeg * Math.PI) / 180 : undefined,
+        material: h.material,
+        onVolume: h.onVolume,
         isGoal: h.goal,
         startLimb: h.start,
       }),
     );
+    // 体积块置底渲染（其上的子点后画）；稳定排序保持同类原顺序
+    this.holds.sort((a, b) => (a.type === "volume" ? -1 : 0) - (b.type === "volume" ? -1 : 0));
     this.reset();
   }
 
@@ -156,7 +177,7 @@ export class Game {
       LF: limbs.LF.hold!.pos,
       RF: limbs.RF.hold!.pos,
     };
-    const body = bodyForLevel(this.climberLevel);
+    const body = this.buildBody();
     const bend = desiredBend(body, pelvis, ori, startTargets);
     this.c = {
       body,
@@ -224,7 +245,7 @@ export class Game {
     if (!this.dragging) return;
     const l = this.dragging;
     const root = this.c.pose.limb[l].root;
-    const reach = maxReachOf(this.c.body, l) * tuning.reachSlack;
+    const reach = maxReachOf(this.c.body, l) * reachSlackOf(this.c.body, tuning);
     const clamped = add(root, clampLen(sub(worldPos, root), reach));
     this.c.limbs[l].freePos = clamped;
     this.dragPos = clamped;
@@ -307,10 +328,11 @@ export class Game {
     if (hold.isGoal && isHand(l)) this.triggerWin();
   }
 
-  private holdAt(p: Vec2, _l: Limb): Hold | null {
+  private holdAt(p: Vec2, l: Limb): Hold | null {
     let best: Hold | null = null;
     let bestD = Infinity;
     for (const h of this.holds) {
+      if (!holdUsableBy(h, l)) continue; // 脚钉仅脚 / 指洞捏点等仅手
       const d = dist(p, h.pos);
       if (d < h.radius * TOUCH_SLACK && d < bestD) {
         bestD = d;
@@ -414,7 +436,7 @@ export class Game {
     const l = this.dragging;
     return {
       center: { ...this.c.pose.limb[l].root },
-      r: maxReachOf(this.c.body, l) * tuning.reachSlack,
+      r: maxReachOf(this.c.body, l) * reachSlackOf(this.c.body, tuning),
     };
   }
 }

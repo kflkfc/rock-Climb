@@ -21,7 +21,7 @@ import {
   rotate,
   clamp,
 } from "../math/vec2.ts";
-import { BodyParams } from "../model/body.ts";
+import { BodyParams, flexSlack } from "../model/body.ts";
 import {
   Limb,
   LIMBS,
@@ -34,8 +34,15 @@ import {
   Pose,
   Orientation,
 } from "../model/skeleton.ts";
-import { Hold } from "./holds.ts";
-import { GripMethod, gripTypeScore, contactAreaScore, directionalFit } from "./grip.ts";
+import { Hold, effectiveFriction } from "./holds.ts";
+import {
+  GripMethod,
+  gripTypeScore,
+  contactAreaScore,
+  directionalFit,
+  isPullingFootGrip,
+} from "./grip.ts";
+import { GRIP_DRAIN_MUL } from "./gripTable.ts";
 import { drain, recover } from "./stamina.ts";
 import { Tuning } from "../config/tuning.ts";
 import { dsin, dcos, datan2, dpow, dhypot } from "../math/dmath.ts";
@@ -92,6 +99,11 @@ const IMBALANCE_LIMIT = 1.4; // 失衡持续多少秒后强制脱手
 
 export function attachedLimbs(c: Climber): Limb[] {
   return LIMBS.filter((l) => c.limbs[l].attached && c.limbs[l].hold);
+}
+
+/** 个体化伸展宽容 = 全局调参 × 柔韧系数（柔韧 0.5 中位 = ×1.0） */
+export function reachSlackOf(b: BodyParams, t: Tuning): number {
+  return t.reachSlack * flexSlack(b);
 }
 
 /** 某肢端末端的世界目标：抓住=岩点位置；自由=把手位置 */
@@ -171,7 +183,7 @@ function solvePelvis(c: Climber, dt: number, t: Tuning) {
       const root = pose.limb[l].root;
       const hold = c.limbs[l].hold!;
       const d = dist(root, hold.pos);
-      const maxR = maxReachOf(c.body, l) * t.reachSlack;
+      const maxR = maxReachOf(c.body, l) * reachSlackOf(c.body, t);
       if (d > maxR) accel = add(accel, scale(norm(sub(hold.pos, root)), (d - maxR) * t.gripStiff));
     }
   }
@@ -189,7 +201,7 @@ function solvePelvis(c: Climber, dt: number, t: Tuning) {
       const root = pose.limb[l].root;
       const hold = c.limbs[l].hold!;
       const d = dist(root, hold.pos);
-      const maxR = maxReachOf(c.body, l) * t.reachSlack * 1.18;
+      const maxR = maxReachOf(c.body, l) * reachSlackOf(c.body, t) * 1.18;
       if (d > maxR) {
         corr = add(corr, scale(norm(sub(hold.pos, root)), d - maxR));
         n++;
@@ -320,7 +332,7 @@ function solveFreeLimbs(c: Climber, dt: number, t: Tuning) {
     // 约束：末端不超出根关节可达范围
     const off = sub(next, root);
     const d2 = len(off);
-    const maxR = maxReachOf(c.body, l) * t.reachSlack;
+    const maxR = maxReachOf(c.body, l) * reachSlackOf(c.body, t);
     if (d2 > maxR) next = add(root, scale(off, maxR / d2));
     c.freePrev[l] = { ...cur };
     st.freePos = next;
@@ -423,8 +435,10 @@ export function stepClimber(
     if (!comInside) load *= 1 + t.imbalanceDrain * (1.2 - c.body.coreStability);
 
     // 方向对齐（每帧实时）：手悬向重心 / 脚撑离重心 的受力轴 vs 岩点可用方向锥。
+    // 勾脚/挂脚是"拉"型脚法 → 按手的语义（把身体拉向岩点），仰角/屋檐的关键。
     // 身体（重心）位置/旋转改变受力轴 → 错向则 align 低 → 抓力骤降、耐力急耗。
-    const loadAngle = isHand(l)
+    const pulls = isHand(l) || isPullingFootGrip(st.grip);
+    const loadAngle = pulls
       ? datan2(com.y - hold.pos.y, com.x - hold.pos.x)
       : datan2(hold.pos.y - com.y, hold.pos.x - com.x);
     const align = directionalFit(loadAngle, hold.pullDir, hold.pullTol);
@@ -433,12 +447,15 @@ export function stepClimber(
 
     const adapt = gripTypeScore(hold.type, st.grip!);
     const baseMatch = adapt * contactAreaScore(st.contactDist, hold.radius);
-    const liveMatch = Math.max(0.05, baseMatch * alignEff);
+    // 技术熟练（能力，0.5 中位 = ×1.0）：老手用同样的抓法更省力
+    const liveMatch = Math.max(0.05, baseMatch * alignEff * (0.9 + 0.2 * c.body.technique));
 
     // 抓力上限（体重单位），随对齐缩放：错向有效抓力骤降；不乘疲劳（耐力独立处理）。
+    // 摩擦项（P1）：有效摩擦 = 类型摩擦 × 材质档位；光滑点抓力上限打折——Sloper 的命门。
     const maxForce =
       hold.friendliness *
       (0.5 + 0.5 * adapt) *
+      (0.55 + 0.45 * effectiveFriction(hold)) *
       c.body.fingerStrength *
       t.capacity *
       t.maxForceK;
@@ -447,10 +464,17 @@ export function stepClimber(
     // 张力对抗：夹在两个方向相反的点之间需主动发力维持，叠加耐力消耗
     const tension = handTension(c, l, loadAngle) * t.tensionCost * (1.2 - c.body.coreStability);
 
-    // 耐力消耗 = 负载 ÷ 实时匹配度 × (1/指力) + 张力开销（匹配/对齐越低掉得越快）
+    // 耐力消耗 = 负载×指力需求 ÷ 实时匹配度 × (1/指力) + 张力开销，
+    // 再乘岩点类型消耗系数（gaston 肩部对抗等）、抓法消耗系数（勾脚/挂脚主动发力）
+    // 与抓握耐力（能力，0.5 中位 = ×1.0）。
+    const demand = isHand(l) ? hold.fingerDemand : 1;
     const drainRate =
-      ((load / liveMatch) * (1 / Math.max(0.2, c.body.fingerStrength)) * t.staminaDrain +
+      (((load * demand) / liveMatch) * (1 / Math.max(0.2, c.body.fingerStrength)) *
+        t.staminaDrain +
         tension) *
+      hold.drainMul *
+      GRIP_DRAIN_MUL[st.grip!] *
+      (1.25 - 0.5 * c.body.endurance) *
       0.0013;
     st.stamina = drain(st.stamina, drainRate, dt);
 
@@ -485,11 +509,11 @@ export function stepClimber(
     }
   }
 
-  // 恢复自由肢端耐力
+  // 恢复自由肢端耐力（恢复速度能力：0.5 中位 = ×1.0）
   for (const l of LIMBS) {
     const st = c.limbs[l];
     if (!st.attached) {
-      st.stamina = recover(st.stamina, t.staminaRecover, dt);
+      st.stamina = recover(st.stamina, t.staminaRecover * (0.6 + 0.8 * c.body.recovery), dt);
       st.align = 1;
     }
   }

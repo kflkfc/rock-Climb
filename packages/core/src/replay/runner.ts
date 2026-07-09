@@ -44,6 +44,9 @@ function applyEvent(game: Game, ev: Pending): void {
     case "climber":
       game.setClimberLevel(ev.n);
       break;
+    case "chara":
+      game.setCharacter(ev.id);
+      break;
   }
 }
 
@@ -57,6 +60,7 @@ export class GameRunner {
   /** tape 起点时的初始条件（中途变化走事件重演；导出时不得用"末态"覆盖） */
   private startClimberLevel: number;
   private startLevelIndex: number;
+  private startCharacterId: string;
 
   constructor(levelIndex = 0, climberLevel?: number) {
     this.game = new Game(LEVELS[levelIndex]);
@@ -64,6 +68,7 @@ export class GameRunner {
     this.tuningSnapshot = { ...tuning };
     this.startClimberLevel = this.game.climberLevel;
     this.startLevelIndex = this.game.levelIndex;
+    this.startCharacterId = this.game.characterId;
   }
 
   /** UI 任意时刻调用；坐标事件量化后入队，下个逻辑帧生效 */
@@ -101,6 +106,7 @@ export class GameRunner {
     this.tuningSnapshot = { ...tuning };
     this.startClimberLevel = this.game.climberLevel;
     this.startLevelIndex = this.game.levelIndex;
+    this.startCharacterId = this.game.characterId;
   }
 
   /** 导出当前 tape 为回放文件（初始条件取 tape 起点快照，claim 取当前逻辑状态） */
@@ -111,6 +117,7 @@ export class GameRunner {
       levelId: LEVELS[this.startLevelIndex].id,
       levelIndex: this.startLevelIndex,
       climberLevel: this.startClimberLevel,
+      characterId: this.startCharacterId,
       tuning: this.tuningSnapshot,
       events: this.tape.slice(),
       frames: this.frame,
@@ -141,6 +148,7 @@ export function replayRun(replay: Replay): ReplayResult {
   try {
     const game = new Game(LEVELS[replay.levelIndex]);
     game.setClimberLevel(replay.climberLevel);
+    if (replay.characterId) game.setCharacter(replay.characterId); // 缺省=默认攀岩者（旧回放兼容）
     let ei = 0;
     for (let f = 0; f < replay.frames; f++) {
       while (ei < replay.events.length && replay.events[ei].f === f) {

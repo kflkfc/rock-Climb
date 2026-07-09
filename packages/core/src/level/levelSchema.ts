@@ -1,7 +1,7 @@
 // 纯逻辑 · 关卡数据格式（JSON Schema 的 TS 表达）。
 // 正式版可由关卡生成器产出同结构 JSON；切片手工填 1 关。
 
-import { HoldType } from "../sim/holds.ts";
+import { HoldType, HoldMaterial } from "../sim/holds.ts";
 import { Limb } from "../model/skeleton.ts";
 
 export interface HoldDef {
@@ -12,6 +12,8 @@ export interface HoldDef {
   radius?: number;
   pullDirDeg?: number; // 朝向：最佳受力方向（度，90=向下拉，0=右，-90=上，180=左）
   pullTolDeg?: number; // 受力锥半角（度）；不填用该形状默认
+  material?: HoldMaterial; // 表面材质：grippy 磨砂 / normal / slick 光滑（默认 normal）
+  onVolume?: string; // 所在体积块 id（渲染层级归属）
   goal?: boolean; // 终点岩点（彩虹标识）
   start?: Limb; // 起始时该肢端预置于此
 }
