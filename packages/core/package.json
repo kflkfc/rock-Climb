@@ -1,7 +1,7 @@
 {
   "name": "@kkc/core",
   "private": true,
-  "version": "0.2.0",
+  "version": "0.5.0",
   "type": "module",
   "description": "KingKong Climbing 确定性纯逻辑内核（零 DOM 零平台 API，可移植 Web/微信/Node）",
   "devDependencies": {

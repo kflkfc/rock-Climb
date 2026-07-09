@@ -6,10 +6,14 @@ import { LevelDef } from "@kkc/core/level/levelSchema.ts";
 
 const VIEW_W = 500; // 屏幕横向可见的世界宽度（越大可见墙面越宽、角色越小）
 
+const TILT_K = 0.3; // 墙角→视角倾斜比例（1=完全跟随会晕；0=关闭）
+
 export class Camera {
   scale = 1;
   private camX = 0;
   private camY = 0;
+  /** 当前显示旋转（弧度，绕屏幕中心）：过角时缓动 1-2s 而非瞬切 */
+  private rot = 0;
   constructor(
     public canvasW: number,
     public canvasH: number,
@@ -56,17 +60,31 @@ export class Camera {
     this.camY += (wantY - this.camY) * k;
   }
 
+  /** 过角缓动：视角向墙角方向轻微倾斜（部分跟随，~1s 到位），暗示"墙变陡了" */
+  followAngle(wallAngleDeg: number, dt: number) {
+    const target = (-(wallAngleDeg - 90) * Math.PI * TILT_K) / 180;
+    this.rot += (target - this.rot) * Math.min(1, dt * 1.6);
+  }
+
   toScreen(p: Vec2): Vec2 {
+    const dx = (p.x - this.camX) * this.scale;
+    const dy = (p.y - this.camY) * this.scale;
+    const cos = Math.cos(this.rot);
+    const sin = Math.sin(this.rot);
     return {
-      x: (p.x - this.camX) * this.scale + this.canvasW / 2,
-      y: (p.y - this.camY) * this.scale + this.canvasH / 2,
+      x: dx * cos - dy * sin + this.canvasW / 2,
+      y: dx * sin + dy * cos + this.canvasH / 2,
     };
   }
 
   toWorld(sx: number, sy: number): Vec2 {
+    const dx = sx - this.canvasW / 2;
+    const dy = sy - this.canvasH / 2;
+    const cos = Math.cos(-this.rot);
+    const sin = Math.sin(-this.rot);
     return {
-      x: (sx - this.canvasW / 2) / this.scale + this.camX,
-      y: (sy - this.canvasH / 2) / this.scale + this.camY,
+      x: (dx * cos - dy * sin) / this.scale + this.camX,
+      y: (dx * sin + dy * cos) / this.scale + this.camY,
     };
   }
 }

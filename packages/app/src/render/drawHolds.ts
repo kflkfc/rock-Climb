@@ -4,6 +4,7 @@ import { Camera } from "./camera.ts";
 import { Game } from "@kkc/core/sim/gameState.ts";
 import { Hold, HOLD_COLOR } from "@kkc/core/sim/holds.ts";
 import { LIMBS } from "@kkc/core/model/skeleton.ts";
+import { wallAngleAtY } from "@kkc/core/level/levelSchema.ts";
 
 // ---- 写实岩点渲染：3D 光影渐变 + 树脂磨砂质感 + 接触阴影 + 高光 + 螺栓孔 ----
 
@@ -277,9 +278,11 @@ export function drawHolds(ctx: CanvasRenderingContext2D, cam: Camera, game: Game
     const r = h.radius * cam.scale;
     const col = HOLD_COLOR[h.type];
 
-    // 投影（写实软阴影：偏移 + 半透明）
+    // 投影（写实软阴影）：方向随局部墙角联动——直壁投下方，屋檐光源相对反转投上方
+    const localAng = wallAngleAtY(game.level, h.pos.y);
+    const flip = Math.max(-1, Math.min(1, (135 - localAng) / 45)); // 90°→1 …… 180°→-1
     ctx.save();
-    ctx.translate(s.x + 4, s.y + 6);
+    ctx.translate(s.x + 4, s.y + 6 * flip);
     ctx.fillStyle = "rgba(45,35,22,0.22)";
     holdPath(ctx, h, r * 1.02);
     ctx.fill();

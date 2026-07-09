@@ -1,6 +1,7 @@
 // 引导：canvas / 60Hz 循环 / 串起 input → core → render。
 
 import { LEVEL_SEQS } from "@kkc/core/level/levels.ts";
+import { wallAngleAtY } from "@kkc/core/level/levelSchema.ts";
 import { GameRunner, LOGIC_DT, replayRun } from "@kkc/core/replay/runner.ts";
 import { Replay } from "@kkc/core/replay/format.ts";
 import { Camera } from "@kkc/app/render/camera.ts";
@@ -121,6 +122,7 @@ function render(dt: number) {
   // 平滑后的显示姿态（物理为逻辑帧瞬时值；平滑仅作用于显示，不回写逻辑）
   const pose = smoother.update(game, dt);
   cam.follow(pose.com.x, pose.com.y, dt);
+  cam.followAngle(wallAngleAtY(game.level, pose.com.y), dt); // 过角缓动旋转
 
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   drawWall(ctx, cam, game.level);

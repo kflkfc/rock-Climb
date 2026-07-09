@@ -45,8 +45,7 @@ export const HOLD_META: Record<HoldType, HoldMeta> = {
   jug: { label: "JUG 大水罐", friendliness: 0.95, friction: 0.9, pullTol: 1.2, defaultPullDirDeg: 90, radius: 22, hands: true, feet: true, fingerDemand: 1.0, drainMul: 1.0 },
   edge: { label: "EDGE 平台边", friendliness: 0.8, friction: 0.8, pullTol: 0.55, defaultPullDirDeg: 90, radius: 18, hands: true, feet: true, fingerDemand: 1.0, drainMul: 1.0 },
   pocket: { label: "POCKET 指洞", friendliness: 0.62, friction: 0.75, pullTol: 0.6, defaultPullDirDeg: 90, radius: 14, hands: true, feet: false, fingerDemand: 1.25, drainMul: 1.0 },
-  // crimp fingerDemand 暂保 1.0（避免 P1 开发期黄金回放漂移），P1-7 定版校准到 ~1.15
-  crimp: { label: "CRIMP 小棱", friendliness: 0.45, friction: 0.7, pullTol: 0.42, defaultPullDirDeg: 90, radius: 16, hands: true, feet: true, fingerDemand: 1.0, drainMul: 1.0 },
+  crimp: { label: "CRIMP 小棱", friendliness: 0.45, friction: 0.7, pullTol: 0.42, defaultPullDirDeg: 90, radius: 16, hands: true, feet: true, fingerDemand: 1.15, drainMul: 1.0 },
   pinch: { label: "PINCH 捏点", friendliness: 0.6, friction: 0.75, pullTol: 0.5, defaultPullDirDeg: 90, radius: 16, hands: true, feet: false, fingerDemand: 1.05, drainMul: 1.0 },
   sidepull: { label: "SIDE PULL 侧拉", friendliness: 0.55, friction: 0.75, pullTol: 0.45, defaultPullDirDeg: 0, radius: 16, hands: true, feet: false, fingerDemand: 1.0, drainMul: 1.05 },
   undercling: { label: "UNDERCLING 反提", friendliness: 0.5, friction: 0.75, pullTol: 0.45, defaultPullDirDeg: -90, radius: 16, hands: true, feet: false, fingerDemand: 1.0, drainMul: 1.15 },

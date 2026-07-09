@@ -320,9 +320,11 @@ export class Game {
   chooseGrip(grip: GripOption) {
     if (!this.ring) return;
     const { limb, hold, contactDist } = this.ring;
-    this.commitGrip(limb, hold, grip, contactDist);
+    // 先退出环再 commit：commitGrip 抓到终点会置 won，不能被 climbing 覆盖
+    // （曾有 bug：非 Jug 终点经抓法环完攀被吞——终点是 Jug 时走直抓路径掩盖了它）
     this.ring = null;
     this.status = "climbing";
+    this.commitGrip(limb, hold, grip, contactDist);
   }
 
   /** 按抓法环选项序号选定（回放事件的稳定引用；options 顺序确定）。序号越界=取消 */

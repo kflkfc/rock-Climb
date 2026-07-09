@@ -133,6 +133,21 @@ export function gravityComponents(wallAngleDeg: number): { para: number; perp: n
 }
 
 /**
+ * 带符号的垂墙分量（P1 板墙）：
+ *  - perpPull：把身体拉离墙面（仰角/屋檐，>90°）——增加手负载
+ *  - perpPress：把身体压进墙面（板墙，<90°）——脚摩擦主导、手几乎减负
+ */
+export function gravitySigned(wallAngleDeg: number): {
+  para: number;
+  perpPull: number;
+  perpPress: number;
+} {
+  const r = (wallAngleDeg * Math.PI) / 180;
+  const c = dcos(r);
+  return { para: Math.abs(dsin(r)), perpPull: Math.max(0, -c), perpPress: Math.max(0, c) };
+}
+
+/**
  * 骨盆跟随求解（这是"能不能向上爬"的关键）：
  *  - 每个抓住的【手】把骨盆往"它下方约一臂长"拉（身体悬于手下）
  *  - 每个抓住的【脚】把骨盆往"它上方约一腿长"顶（身体立于脚上）
@@ -424,10 +439,11 @@ export function stepClimber(
     return res;
   }
 
-  const { para, perp } = gravityComponents(wallAngleDeg);
-  // 负载与抓力上限统一用"体重单位"，避免量纲不一致导致开局即脱手
+  const { para, perpPull, perpPress } = gravitySigned(wallAngleDeg);
+  // 负载与抓力上限统一用"体重单位"，避免量纲不一致导致开局即脱手。
+  // 板墙(perpPress>0)：压入分量不加负载——身体贴墙靠脚摩擦站住，这正是板墙"省手"的原因。
   const Fpara = c.body.weight * para; // 沿墙下滑总力
-  const Fperp = c.body.weight * perp; // 垂墙（拉离/压入）总力
+  const Fperp = c.body.weight * perpPull; // 垂墙拉离总力（仰角才有）
 
   // 1+ 发力混合 → 自由肢端摆放 → 骨盆跟随 → 身体朝向 → 关节弯曲 → 姿态
   updatePullBlend(c, dt);
@@ -464,7 +480,8 @@ export function stepClimber(
   // 单类支撑（只手/只脚，如屋檐倒挂只用脚）时该类承担全部负载（归一化）。
   const handCount = att.filter(isHand).length;
   const footCount = att.length - handCount;
-  let hFrac = 0.5 + 0.4 * perp; // 垂直 0.5；屋檐 perp≈1 →0.9
+  // 垂直 0.5；屋檐 perpPull≈1 → 手 0.9；板墙 perpPress↑ → 脚主导（对齐 GDD 墙角承重表）
+  let hFrac = 0.5 + 0.4 * perpPull - 0.28 * perpPress;
   let fFrac = 1 - hFrac;
   if (handCount === 0) fFrac = 1; // 只用脚（蝙蝠挂）→ 脚承全部
   if (footCount === 0) hFrac = 1; // 只用手（纯吊臂）→ 手承全部
@@ -515,10 +532,13 @@ export function stepClimber(
       c.body.fingerStrength *
       t.capacity *
       t.maxForceK;
-    // 张力对抗（两面性）：对抗度 → 消耗；陡仰(perp↑)上对拉压紧 → 抓力增益（核心调制）
+    // 张力对抗（两面性）：对抗度 → 消耗；陡仰(perpPull↑)上对拉压紧 → 抓力增益（核心调制）
     const oppose = oppositionOf(l, loadAngle, pullAngles);
-    const tensionRelief = 1 + t.tensionBoost * oppose * perp * (0.5 + 0.5 * c.body.coreStability);
-    const effMax = maxForce * (0.3 + 0.7 * alignEff) * tensionRelief;
+    const tensionRelief =
+      1 + t.tensionBoost * oppose * perpPull * (0.5 + 0.5 * c.body.coreStability);
+    // 板墙脚摩擦增益：压入分量 × 有效摩擦 → 脚下如有神（抹脚在板墙上的意义）
+    const slabBoost = !isHand(l) ? 1 + perpPress * 0.8 * effectiveFriction(hold) : 1;
+    const effMax = maxForce * (0.3 + 0.7 * alignEff) * tensionRelief * slabBoost;
     const tension = oppose * 30 * t.tensionCost * (1.2 - c.body.coreStability);
 
     // 耐力消耗 = 负载×指力需求 ÷ 实时匹配度 × (1/指力) + 张力开销，

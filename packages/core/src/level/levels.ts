@@ -1,7 +1,7 @@
 // 纯逻辑 · 6 条关卡（V1 直壁 / V2 横移 / V3 上下 / V4 特定动作 / V5 仰角+直壁 / V6 屋檐倒挂）。
 // 单轨共用生成器：一条岩点轨道，手先用、脚随后踩同一批点（贴近真实抱石，密度减半→稀疏）。
 
-import { LevelDef, HoldDef } from "./levelSchema.ts";
+import { LevelDef, HoldDef, WallSegment } from "./levelSchema.ts";
 import { Limb } from "../model/skeleton.ts";
 import { HoldType } from "../sim/holds.ts";
 import { dcos, dhypot } from "../math/dmath.ts";
@@ -52,6 +52,7 @@ interface RouteCfg {
   grade: string;
   wallAngleDeg: number;
   wallAngleTop?: number;
+  wallSegments?: WallSegment[]; // v2 分段折线墙（优先于上两项）
   rail: Pt[]; // 单条轨道折线（r0=起手底端 → 末端=终点）
   n: number; // 岩点数
   zig?: number; // 左右交替偏移
@@ -119,6 +120,7 @@ function buildRoute(cfg: RouteCfg): { level: LevelDef; seq: [Limb, string][] } {
     grade: cfg.grade,
     wallAngleDeg: cfg.wallAngleDeg,
     ...(cfg.wallAngleTop != null ? { wallAngleTop: cfg.wallAngleTop } : {}),
+    ...(cfg.wallSegments ? { wallSegments: cfg.wallSegments } : {}),
     worldWidth: WORLD_W,
     worldHeight: WORLD_H,
     holds,
@@ -275,12 +277,80 @@ const V6 = buildRoof({
   starThreshold: 12,
 });
 
+// ---- V7 STÖKK（跳）：动态线——中段 240px 大间隙，静态够不到，必须甩跳 ----
+const V7_LEVEL: LevelDef = {
+  id: "v7",
+  name: "STÖKK",
+  grade: "V4",
+  wallAngleDeg: 90,
+  worldWidth: WORLD_W,
+  worldHeight: WORLD_H,
+  goalHoldId: "goal",
+  starThreshold: 7,
+  holds: [
+    { id: "s_lf", type: "jug", x: 330, y: 860, start: "LF" },
+    { id: "s_rf", type: "jug", x: 390, y: 860, start: "RF" },
+    { id: "s_lh", type: "jug", x: 330, y: 730, start: "LH" },
+    { id: "s_rh", type: "jug", x: 390, y: 730, start: "RH" },
+    { id: "a1", type: "jug", x: 320, y: 615 },
+    { id: "a2", type: "edge", x: 400, y: 575, pullDirDeg: 90 },
+    // —— 240px 空白带：这里没有点，甩跳是唯一出路；终点即跳点（拍中完攀）——
+    { id: "goal", type: "jug", x: 360, y: 335, radius: 34, goal: true },
+  ],
+};
+
+// ---- V8 SLEIPUR（滑）：摩擦线——底 75° 板墙抹脚上，顶直壁全 Sloper（含光滑点 crux）----
+const V8 = buildRoute({
+  id: "v8",
+  name: "SLEIPUR",
+  grade: "V3",
+  wallAngleDeg: 75, // 被 wallSegments 覆盖，留作兼容展示
+  wallSegments: [
+    { yTop: 480, yBottom: WORLD_H, angleDeg: 75 }, // 底：板墙（脚摩擦主导，压入增益）
+    { yTop: 0, yBottom: 480, angleDeg: 90 }, // 顶：直壁
+  ],
+  rail: [{ x: 360, y: 850 }, { x: 360, y: 130 }],
+  n: 16,
+  zig: 30,
+  holdType: (i, n) => {
+    if (i === n - 5) return { type: "sloper", radius: 28, material: "slick" }; // crux：光滑滑面
+    if (i >= 4 && i % 3 === 1) return { type: "sloper", radius: 26, material: "grippy" };
+    if (i >= n - 8) return { type: "sloper", radius: 26 };
+    return {}; // 底段 jug 热身
+  },
+});
+
+// ---- V9 SPENNA（张力）：140° 陡仰——侧拉对抗段 + 反提，靠全身张力增益才撑得住 ----
+const V9 = buildRoute({
+  id: "v9",
+  name: "SPENNA",
+  grade: "V6",
+  wallAngleDeg: 140,
+  rail: [{ x: 360, y: 840 }, { x: 360, y: 160 }],
+  n: 14,
+  zig: 44, // 大横距 → 对抗点分居两侧
+  bias: 0.3,
+  holdType: (i) => {
+    // 中段对抗区：左侧点向右拉(0°)、右侧点向左拉(180°)——双手侧拉对抗（张力线灵魂）。
+    // 用 edge+侧向朝向而非 sidepull 类型：单轨路线脚要踩同一批点（sidepull 仅手）。
+    if (i >= 6 && i <= 9) {
+      return { type: "edge", pullDirDeg: i % 2 === 0 ? 0 : 180, pullTolDeg: 60, radius: 18 };
+    }
+    return { type: "jug" }; // 其余大点（140° 本身已是强度）
+  },
+  starThreshold: 12,
+});
+
 export const LEVEL_V1 = V1.level;
 export const LEVEL_V2 = V2.level;
 export const LEVEL_V3 = V3.level;
 export const LEVEL_V4 = V4.level;
 export const LEVEL_V5 = V5.level;
 export const LEVEL_V6 = V6.level;
+
+export const LEVEL_V7 = V7_LEVEL;
+export const LEVEL_V8 = V8.level;
+export const LEVEL_V9 = V9.level;
 
 export const LEVELS: LevelDef[] = [
   LEVEL_V1,
@@ -289,6 +359,9 @@ export const LEVELS: LevelDef[] = [
   LEVEL_V4,
   LEVEL_V5,
   LEVEL_V6,
+  LEVEL_V7,
+  LEVEL_V8,
+  LEVEL_V9,
 ];
 
 /** 开发/测试用：各关一条参考攀爬序列。 */
@@ -299,4 +372,6 @@ export const LEVEL_SEQS: Record<string, [Limb, string][]> = {
   v4: V4.seq,
   v5: V5.seq,
   v6: V6.seq,
+  v8: V8.seq,
+  v9: V9.seq,
 };
