@@ -8,41 +8,45 @@ export interface KVStore {
   remove(key: string): void;
 }
 
+import { StarResult, noStars, mergeStars } from "./stars.ts";
+
 export interface LevelProgress {
   /** 最佳抓取数（越少越好）；null = 未完攀过 */
   bestMoves: number | null;
   bestTimeMs: number | null;
-  /** 当前简化星级的历史最高（P2 换三星分项后由迁移函数升级此字段） */
-  stars: number;
+  /** 三星分项历史并集（schema 2）：登顶/流畅/神速各自取历史最优 */
+  stars: StarResult;
   wins: number;
   attempts: number;
 }
 
-export interface SaveV1 {
-  schema: 1;
+export interface SaveV2 {
+  schema: 2;
   createdAt: string; // ISO 时间，仅作展示；逻辑不读墙钟
   climberLevel: number; // 选手级别 1-10
+  characterId: string; // 当前角色
   settings: { muted: boolean };
   /** 按关卡 id 记录进度 */
   progress: Record<string, LevelProgress>;
 }
 
-export type SaveData = SaveV1; // 最新版别名；升版时改指向
+export type SaveData = SaveV2; // 最新版别名；升版时改指向
 
 export const SAVE_KEY = "kkc.save";
 
-export function defaultSave(now: string): SaveV1 {
+export function defaultSave(now: string): SaveV2 {
   return {
-    schema: 1,
+    schema: 2,
     createdAt: now,
     climberLevel: 5,
+    characterId: "climber",
     settings: { muted: false },
     progress: {},
   };
 }
 
 export function emptyLevelProgress(): LevelProgress {
-  return { bestMoves: null, bestTimeMs: null, stars: 0, wins: 0, attempts: 0 };
+  return { bestMoves: null, bestTimeMs: null, stars: noStars(), wins: 0, attempts: 0 };
 }
 
 // ---- 迁移框架 ----
@@ -50,11 +54,21 @@ export function emptyLevelProgress(): LevelProgress {
 
 type Migration = (raw: Record<string, unknown>) => Record<string, unknown>;
 const MIGRATIONS: Record<number, Migration> = {
-  // 示例（P2 上三星分项时）：
-  // 1: (raw) => ({ ...raw, schema: 2, progress: convertStarsToTriple(raw.progress) }),
+  // v1 → v2：简化星数(0-3) → 三星分项。保守迁移：只保留登顶（流畅/神速重新挣）。
+  1: (raw) => {
+    const oldProgress = (raw.progress ?? {}) as Record<string, Record<string, unknown>>;
+    const progress: Record<string, unknown> = {};
+    for (const [id, p] of Object.entries(oldProgress)) {
+      progress[id] = {
+        ...p,
+        stars: { topped: ((p.stars as number) ?? 0) >= 1, flow: false, speed: false },
+      };
+    }
+    return { ...raw, schema: 2, characterId: raw.characterId ?? "climber", progress };
+  },
 };
 
-export const LATEST_SCHEMA = 1;
+export const LATEST_SCHEMA = 2;
 
 /** 解析 + 迁移 + 校验。任何解析失败/结构损坏 → 返回 null（调用方决定是否用默认档） */
 export function parseSave(json: string | null): SaveData | null {
@@ -115,13 +129,18 @@ export class SaveManager {
     this.persist();
   }
 
-  /** 完攀结算：滚动保留历史最佳（抓取数/用时/星级各自取最优） */
-  recordWin(levelId: string, moves: number, timeMs: number, stars: number): void {
+  /** 完攀结算：滚动保留历史最佳（抓取数/用时各取最优，三星分项并集） */
+  recordWin(levelId: string, moves: number, timeMs: number, stars: StarResult): void {
     const p = this.levelProgress(levelId);
     p.wins++;
     if (p.bestMoves === null || moves < p.bestMoves) p.bestMoves = moves;
     if (p.bestTimeMs === null || timeMs < p.bestTimeMs) p.bestTimeMs = timeMs;
-    if (stars > p.stars) p.stars = stars;
+    p.stars = mergeStars(p.stars, stars);
+    this.persist();
+  }
+
+  setCharacter(id: string): void {
+    this.data.characterId = id;
     this.persist();
   }
 

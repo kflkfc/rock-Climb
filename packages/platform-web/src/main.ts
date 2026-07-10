@@ -71,7 +71,12 @@ game.onWin = () => {
   const s = cam.toScreen(goal.pos);
   burstWin(s.x, s.y);
   platform.audio.win();
-  save.recordWin(game.level.id, game.gripCount, Math.round(game.time * 1000), game.stars);
+  save.recordWin(
+    game.level.id,
+    game.gripCount,
+    Math.round(game.runTime * 1000),
+    game.lastStars ?? { topped: true, flow: false, speed: false },
+  );
 };
 
 // 键盘 1-9 切换线路（⤴ 按钮也可循环切换）

@@ -126,6 +126,11 @@ function buildRoute(cfg: RouteCfg): { level: LevelDef; seq: [Limb, string][] } {
     holds,
     goalHoldId: "goal",
     starThreshold: cfg.starThreshold ?? Math.ceil(seq.length * 0.9),
+    // 初版星级目标（宽松）：流畅=参考序列的手步数+2；神速=每步 9s。P2-4 换 AI 定标
+    stars: {
+      targetMoves: (cfg.starThreshold ?? Math.ceil(seq.length * 0.9)) + 2,
+      targetTimeSec: Math.max(45, seq.length * 9),
+    },
   };
   return { level, seq };
 }
@@ -184,6 +189,10 @@ function buildRoof(cfg: {
     holds,
     goalHoldId: "goal",
     starThreshold: cfg.starThreshold ?? seq.length,
+    stars: {
+      targetMoves: (cfg.starThreshold ?? seq.length) + 2,
+      targetTimeSec: Math.max(60, seq.length * 10),
+    },
   };
   return { level, seq };
 }
@@ -287,6 +296,7 @@ const V7_LEVEL: LevelDef = {
   worldHeight: WORLD_H,
   goalHoldId: "goal",
   starThreshold: 7,
+  stars: { targetMoves: 7, targetTimeSec: 60 },
   holds: [
     { id: "s_lf", type: "jug", x: 330, y: 860, start: "LF" },
     { id: "s_rf", type: "jug", x: 390, y: 860, start: "RF" },

@@ -29,8 +29,34 @@ describe("存档 · 解析与迁移", () => {
 
   it("序列化往返无损", () => {
     const save = defaultSave("t");
-    save.progress["v1"] = { bestMoves: 7, bestTimeMs: 61500, stars: 2, wins: 3, attempts: 9 };
+    save.progress["v1"] = {
+      bestMoves: 7,
+      bestTimeMs: 61500,
+      stars: { topped: true, flow: true, speed: false },
+      wins: 3,
+      attempts: 9,
+    };
     expect(parseSave(serializeSave(save))).toEqual(save);
+  });
+
+  it("v1 旧档迁移到 v2：简化星数 → 三星分项（保守只保登顶）", () => {
+    const v1 = JSON.stringify({
+      schema: 1,
+      createdAt: "t",
+      climberLevel: 7,
+      settings: { muted: true },
+      progress: {
+        v1: { bestMoves: 6, bestTimeMs: 50000, stars: 3, wins: 2, attempts: 5 },
+        v2: { bestMoves: null, bestTimeMs: null, stars: 0, wins: 0, attempts: 3 },
+      },
+    });
+    const migrated = parseSave(v1)!;
+    expect(migrated.schema).toBe(2);
+    expect(migrated.climberLevel).toBe(7); // 其余字段原样
+    expect(migrated.characterId).toBe("climber");
+    expect(migrated.progress["v1"].stars).toEqual({ topped: true, flow: false, speed: false });
+    expect(migrated.progress["v2"].stars).toEqual({ topped: false, flow: false, speed: false });
+    expect(migrated.progress["v1"].bestMoves).toBe(6);
   });
 
   it("损坏 JSON / 错误结构 / 未来 schema → null（不炸不吞档）", () => {
@@ -43,15 +69,15 @@ describe("存档 · 解析与迁移", () => {
 });
 
 describe("存档 · SaveManager", () => {
-  it("完攀滚动保留各维度历史最佳", () => {
+  it("完攀滚动保留各维度历史最佳，三星分项并集", () => {
     const store = memStore();
     const m = new SaveManager(store);
-    m.recordWin("v1", 8, 90000, 1);
-    m.recordWin("v1", 12, 45000, 3); // 抓取更差/用时更好/星更高
+    m.recordWin("v1", 8, 90000, { topped: true, flow: true, speed: false }); // 慢但干净
+    m.recordWin("v1", 12, 45000, { topped: true, flow: false, speed: true }); // 快但拖沓
     const p = m.data.progress["v1"];
     expect(p.bestMoves).toBe(8);
     expect(p.bestTimeMs).toBe(45000);
-    expect(p.stars).toBe(3);
+    expect(p.stars).toEqual({ topped: true, flow: true, speed: true }); // 并集 = 3 星
     expect(p.wins).toBe(2);
     // 已落盘：新管理器读同一 store 还原一致
     expect(new SaveManager(store).data.progress["v1"]).toEqual(p);
@@ -67,10 +93,10 @@ describe("存档 · SaveManager", () => {
 
   it("导出/导入：非法导入不破坏现有档", () => {
     const m = new SaveManager(memStore());
-    m.recordWin("v1", 5, 30000, 3);
+    m.recordWin("v1", 5, 30000, { topped: true, flow: true, speed: true });
     const backup = m.export();
     expect(m.import("garbage")).toBe(false);
-    expect(m.data.progress["v1"].stars).toBe(3); // 原档完好
+    expect(m.data.progress["v1"].stars.flow).toBe(true); // 原档完好
     const fresh = new SaveManager(memStore());
     expect(fresh.import(backup)).toBe(true);
     expect(fresh.data.progress["v1"].bestMoves).toBe(5);

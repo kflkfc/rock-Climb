@@ -76,21 +76,37 @@ export function drawHUD(ctx: CanvasRenderingContext2D, cam: Camera, game: Game):
   iconBtn(ctx, reset.x, reset.y, reset.r, "↻");
   iconBtn(ctx, exit.x, exit.y, exit.r, "⤴");
 
-  // 过关浮层
+  // 过关浮层：三星分项（登顶/流畅/神速逐项显示）
   if (game.status === "won") {
     ctx.fillStyle = "rgba(43,57,51,0.55)";
-    ctx.fillRect(0, H / 2 - 80, W, 160);
+    ctx.fillRect(0, H / 2 - 92, W, 184);
     ctx.textAlign = "center";
     ctx.fillStyle = "#F5EBD3";
     ctx.font = "700 34px system-ui, sans-serif";
-    ctx.fillText("完攀！", W / 2, H / 2 - 56);
-    ctx.font = "26px system-ui, sans-serif";
-    ctx.fillText("★".repeat(game.stars) + "☆".repeat(3 - game.stars), W / 2, H / 2 - 14);
+    ctx.fillText("完攀！", W / 2, H / 2 - 68);
+    const sr = game.lastStars;
+    if (sr) {
+      const items: [boolean, string][] = [
+        [sr.topped, "登顶"],
+        [sr.flow, "流畅"],
+        [sr.speed, "神速"],
+      ];
+      const seg = 110;
+      items.forEach(([got, label], i) => {
+        const x = W / 2 + (i - 1) * seg;
+        ctx.font = "30px system-ui, sans-serif";
+        ctx.fillStyle = got ? "#E5A636" : "rgba(245,235,211,0.35)";
+        ctx.fillText(got ? "★" : "☆", x, H / 2 - 28);
+        ctx.font = "600 13px system-ui, sans-serif";
+        ctx.fillText(label, x, H / 2 + 6);
+      });
+    }
+    ctx.fillStyle = "#F5EBD3";
     ctx.font = "15px system-ui, sans-serif";
     ctx.fillText(
-      `✋ ${game.gripCount} 次   ⏱ ${fmtTime(game.time)}   （回放定格中，↻ 再来）`,
+      `✋ ${game.gripCount} 次   ⏱ ${fmtTime(game.runTime)}   （回放定格中，↻ 再来）`,
       W / 2,
-      H / 2 + 24,
+      H / 2 + 34,
     );
   }
   if (game.status === "fallen") {

@@ -41,7 +41,10 @@ export interface LevelDef {
   worldHeight: number;
   holds: HoldDef[];
   goalHoldId: string;
-  starThreshold: number; // 三星达标：抓取次数 ≤ 此值
+  /** v1 遗留：旧简化星线（stars 未定标时作 targetMoves 兜底） */
+  starThreshold: number;
+  /** v2 星级目标（AI 试解器定标）：★2流畅 ≤targetMoves；★3神速 ≤targetTimeSec */
+  stars?: { targetMoves: number; targetTimeSec: number };
 }
 
 /** 段边界过渡带半宽（世界单位）：墙角在边界两侧各 50 内线性混合，防物理突变 */

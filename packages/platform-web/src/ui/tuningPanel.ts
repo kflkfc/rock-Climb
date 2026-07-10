@@ -9,6 +9,7 @@ import { HOLD_TYPES, HOLD_META, HoldType } from "@kkc/core/sim/holds.ts";
 import { HAND_TABLE, FOOT_TABLE } from "@kkc/core/sim/gripTable.ts";
 import { HAND_GRIPS, FOOT_GRIPS, GRIP_LABEL } from "@kkc/core/sim/grip.ts";
 import { CHARACTERS } from "@kkc/core/model/characters.ts";
+import { totalStars, climberLevelForStars, characterUnlocked } from "@kkc/core/progress/growth.ts";
 
 export function installTuningPanel(runner: GameRunner, save: SaveManager) {
   const game = runner.game;
@@ -37,6 +38,18 @@ export function installTuningPanel(runner: GameRunner, save: SaveManager) {
   lvLabel.append(lvName, lv);
   rows.appendChild(lvLabel);
 
+  // 星池状态（P3 成长页前的临时展示）
+  const starLabel = document.createElement("label");
+  const starName = document.createElement("span");
+  const refreshStars = () => {
+    const s = totalStars(save.data);
+    starName.textContent = `⭐ 星池 ${s} · 建议等级 Lv${climberLevelForStars(s)}`;
+  };
+  refreshStars();
+  starLabel.append(starName);
+  rows.appendChild(starLabel);
+  window.setInterval(refreshStars, 2000); // 轻量轮询（onWin 由 main 接管，不在此包装）
+
   // 角色切换（P3 前的临时入口；正式角色选择页含解锁态/预览）
   const chLabel = document.createElement("label");
   const chName = document.createElement("span");
@@ -46,7 +59,8 @@ export function installTuningPanel(runner: GameRunner, save: SaveManager) {
   for (const c of CHARACTERS) {
     const o = document.createElement("option");
     o.value = c.id;
-    o.textContent = c.name + (c.unlock ? `（${c.unlock.stars}⭐解锁）` : "");
+    const locked = !characterUnlocked(c, totalStars(save.data));
+    o.textContent = c.name + (c.unlock ? `（${c.unlock.stars}⭐${locked ? "解锁" : "✓"}）` : "");
     chSel.appendChild(o);
   }
   chSel.value = game.characterId;

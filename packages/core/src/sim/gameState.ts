@@ -37,6 +37,7 @@ import {
 } from "./physics.ts";
 import { LevelDef, wallAngleAtY } from "../level/levelSchema.ts";
 import { LEVELS } from "../level/levels.ts";
+import { StarResult, judgeStars, starCount } from "../progress/stars.ts";
 import { tuning } from "../config/tuning.ts";
 import { datan2 } from "../math/dmath.ts";
 
@@ -77,6 +78,16 @@ export class Game {
   private fallTimer = 0;
   /** 最近一次脱手归因（HUD 教学提示，2.2s 淡出） */
   lastSlip: { limb: Limb; reason: SlipReason; t: number } | null = null;
+  // ---- run 统计（三星评定口径）：一次"尝试"= 手动重置/换关 → 完攀，跨自动坠落复位累计 ----
+  /** run 计时（秒）：从本 run 首次有效输入起算，坠落复位不清零（防刷神速星） */
+  runTime = 0;
+  /** run 内是否发生过任何脱手/坠落（流畅星判据） */
+  runSlipped = false;
+  /** run 内是否用过 undo（P2-6 接入；预留判据） */
+  runUndoUsed = false;
+  private runStarted = false;
+  /** 完攀时的三星评定结果（won 状态下有效） */
+  lastStars: StarResult | null = null;
   /** 拖拽速度（世界单位/s，逻辑帧平滑）——甩出手势检测用 */
   private dragVel: Vec2 = v();
   private prevDragPos: Vec2 = v();
@@ -154,8 +165,19 @@ export class Game {
 
   resetEpoch = 0;
 
-  reset() {
+  /**
+   * 复位到起始姿态。keepRun=true（坠落自动复位）保留 run 统计（计时/脱手记录延续）；
+   * false（手动重置/换关/换角色）开启全新 run。
+   */
+  reset(keepRun = false) {
     this.resetEpoch++;
+    if (!keepRun) {
+      this.runTime = 0;
+      this.runSlipped = false;
+      this.runUndoUsed = false;
+      this.runStarted = false;
+      this.lastStars = null;
+    }
     const startOf = (l: Limb) => this.holds.find((h) => h.startLimb === l)!;
     const limbs = {} as Record<Limb, LimbState>;
     for (const l of LIMBS) {
@@ -250,6 +272,7 @@ export class Game {
     this.dragPos = { ...worldPos };
     this.prevDragPos = { ...worldPos }; // 同步基准，防拖拽首帧产生假速度（甩跳误判）
     this.dragVel = v();
+    this.runStarted = true; // 首次有效输入 → run 计时开始
     return true;
   }
 
@@ -455,12 +478,14 @@ export class Game {
 
     if (this.status === "fallen") {
       this.fallTimer += dt;
-      if (this.fallTimer >= tuning.fallResetDelay) this.reset();
+      if (this.runStarted) this.runTime += dt; // 坠落等待也计时（神速星防刷）
+      if (this.fallTimer >= tuning.fallResetDelay) this.reset(true); // 保留 run 统计
       return;
     }
 
     if (this.status === "climbing" || this.status === "ring") {
       this.time += dt;
+      if (this.runStarted) this.runTime += dt;
       // 抓法环弹出时物理暂停（玩家思考），其余照常步进
       if (this.status === "climbing") {
         this.recordReplay(dt);
@@ -489,9 +514,11 @@ export class Game {
             this.lastSlip = { limb: first, reason: r.slipReasons[first]!, t: this.time };
           this.onSlip?.();
         }
+        if (r.slipped.length > 0) this.runSlipped = true; // 任何脱手 → 本 run 流畅星失效
         if (r.fell || this.c.fallen) {
           this.status = "fallen";
           this.fallTimer = 0;
+          this.runSlipped = true;
           this.onFall?.();
         }
       }
@@ -513,15 +540,20 @@ export class Game {
     this.status = "won";
     this.replayIdx = 0;
     this.replayAccum = 0;
+    // 三星评定（GDD 4.3.1）：登顶/流畅/神速 分项判定
+    this.lastStars = judgeStars(this.level, {
+      won: true,
+      moves: this.gripCount,
+      timeMs: Math.round(this.runTime * 1000),
+      slipped: this.runSlipped,
+      undoUsed: this.runUndoUsed,
+    });
     this.onWin?.();
   }
 
+  /** 本次完攀星数 0-3（分项详情见 lastStars） */
   get stars(): number {
-    if (this.status !== "won") return 0;
-    const t = this.level.starThreshold;
-    if (this.gripCount <= t) return 3;
-    if (this.gripCount <= t * 1.6) return 2;
-    return 1;
+    return this.status === "won" && this.lastStars ? starCount(this.lastStars) : 0;
   }
 
   /** 渲染用：won 时返回回放帧姿态，否则当前姿态 */
