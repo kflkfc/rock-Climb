@@ -25,7 +25,7 @@ import {
   Pose,
 } from "../model/skeleton.ts";
 import { Hold, makeHold, holdUsableBy } from "./holds.ts";
-import { GripOption, gripOptions, gripsFor, matchPercent } from "./grip.ts";
+import { GripOption, GripMethod, gripOptions, gripsFor, matchPercent } from "./grip.ts";
 import {
   Climber,
   LimbState,
@@ -38,6 +38,7 @@ import {
 import { LevelDef, wallAngleAtY } from "../level/levelSchema.ts";
 import { LEVELS } from "../level/levels.ts";
 import { StarResult, judgeStars, starCount } from "../progress/stars.ts";
+import { dynoUnlocked } from "../progress/techTree.ts";
 import { tuning } from "../config/tuning.ts";
 import { datan2 } from "../math/dmath.ts";
 
@@ -100,7 +101,7 @@ export class Game {
   onSlip?: () => void;
   onFall?: () => void; // 整体掉落（≠单肢滑脱）：音效/存档 attempts 计数用
   onContact?: () => void;
-  onGrab?: (match: number) => void;
+  onGrab?: (match: number, grip: GripMethod) => void; // grip 供熟练度累积
   onDyno?: () => void; // 甩跳起跳瞬间（音效/特效）
 
   levelIndex = 0;
@@ -299,11 +300,12 @@ export class Game {
     this.hoverHold = null;
     if (!hold) {
       // 甩出手势 → Dyno 起跳：手被快速甩向远处松开（没落在任何岩点上）
-      // = 真实抱石"甩出去够"的动作语言；速度阈值防误触
+      // = 真实抱石"甩出去够"的动作语言；速度阈值防误触；技术树 Lv5 解锁
       const speed = len(this.dragVel);
       if (
         isHand(l) &&
         !this.c.dyno &&
+        dynoUnlocked(this.climberLevel) &&
         speed >= tuning.dynoSpeedMin &&
         attachedLimbs(this.c).length >= 1
       ) {
@@ -324,17 +326,17 @@ export class Game {
 
     if (hold.type === "jug") {
       // Jug：跳过抓法环，默认最优抓法直接抓住
-      const best = gripOptions(l, hold, contactDist, pullRad)[0];
+      const best = gripOptions(l, hold, contactDist, pullRad, this.climberLevel)[0];
       this.commitGrip(l, hold, best, contactDist);
       return;
     }
-    // 其它岩点：弹抓法环
+    // 其它岩点：弹抓法环（技术树：只显示当前等级已解锁的抓法）
     this.ring = {
       limb: l,
       hold,
       contactDist,
       pullRad,
-      options: gripOptions(l, hold, contactDist, pullRad),
+      options: gripOptions(l, hold, contactDist, pullRad, this.climberLevel),
     };
     this.status = "ring";
   }
@@ -438,7 +440,7 @@ export class Game {
     st.match = opt.match;
     st.contactDist = contactDist;
     this.gripCount++;
-    this.onGrab?.(opt.match);
+    this.onGrab?.(opt.match, opt.grip);
     // 抓到终点岩点（且是手）→ 过关
     if (hold.isGoal && isHand(l)) this.triggerWin();
   }

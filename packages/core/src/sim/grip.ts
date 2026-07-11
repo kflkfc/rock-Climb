@@ -10,6 +10,7 @@ import { clamp } from "../math/vec2.ts";
 import { Hold, HoldType } from "./holds.ts";
 import { Limb, isHand } from "../model/skeleton.ts";
 import { HAND_TABLE, FOOT_TABLE } from "./gripTable.ts";
+import { gripUnlocked } from "../progress/techTree.ts";
 
 export type HandGrip = "open" | "half" | "full" | "pinch" | "lock" | "slap";
 export type FootGrip = "inside" | "outside" | "smear" | "heel" | "toe";
@@ -108,14 +109,19 @@ export interface GripOption {
   injury: boolean;
 }
 
-/** 为某次接触生成所有抓法选项 + 匹配度（用于抓法环 UI），按匹配度降序 */
+/**
+ * 为某次接触生成抓法选项 + 匹配度（用于抓法环 UI），按匹配度降序。
+ * climberLevel：技术树过滤——未解锁的抓法不出现在环里（默认 10 = 全解锁，测试/工具用）。
+ */
 export function gripOptions(
   limb: Limb,
   hold: Hold,
   distToCenter: number,
   pullRad: number,
+  climberLevel = 10,
 ): GripOption[] {
   return gripsFor(limb)
+    .filter((g) => gripUnlocked(g, climberLevel))
     .map((g) => ({
       grip: g,
       match: matchPercent({ hold, grip: g, distToCenter, pullRad }),

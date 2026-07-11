@@ -62,7 +62,10 @@ installPointer(canvas, runner, cam, () => hud);
 // 音效 + 振动反馈（首次用户手势内解锁 AudioContext）
 canvas.addEventListener("pointerdown", () => platform.audio.unlock(), { once: true });
 game.onContact = () => platform.audio.contact();
-game.onGrab = (match) => platform.audio.grab(match);
+game.onGrab = (match, grip) => {
+  platform.audio.grab(match);
+  save.bumpProficiency(grip); // 使用即涨（60/90 档加成 P2-6 接入物理）
+};
 game.onSlip = () => platform.audio.slip();
 game.onDyno = () => platform.audio.dyno();
 game.onFall = () => save.recordAttempt(game.level.id);

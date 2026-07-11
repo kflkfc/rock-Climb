@@ -28,6 +28,9 @@ export interface SaveV2 {
   settings: { muted: boolean };
   /** 按关卡 id 记录进度 */
   progress: Record<string, LevelProgress>;
+  /** 抓法熟练度 0-100（使用即涨）。可选字段：老档缺省视为全 0。
+   *  P2-6 起接匹配加成/指伤（届时进回放初始条件） */
+  proficiency?: Record<string, number>;
 }
 
 export type SaveData = SaveV2; // 最新版别名；升版时改指向
@@ -142,6 +145,17 @@ export class SaveManager {
   setCharacter(id: string): void {
     this.data.characterId = id;
     this.persist();
+  }
+
+  /** 抓法熟练度 +amount（上限 100），使用即涨 */
+  bumpProficiency(grip: string, amount = 1): void {
+    const p = (this.data.proficiency ??= {});
+    p[grip] = Math.min(100, (p[grip] ?? 0) + amount);
+    this.persist();
+  }
+
+  proficiencyOf(grip: string): number {
+    return this.data.proficiency?.[grip] ?? 0;
   }
 
   setClimberLevel(n: number): void {
