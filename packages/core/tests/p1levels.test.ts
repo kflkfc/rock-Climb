@@ -6,8 +6,10 @@ import { Game } from "../src/sim/gameState.ts";
 import { followSeq } from "./helpers/seqFollower.ts";
 
 describe("P1 验证关卡 · 结构", () => {
-  it("共 9 关；v7 动态 / v8 摩擦分段墙 / v9 张力齐备", () => {
-    expect(LEVELS.length).toBe(9);
+  it("经典 9 关冻结在 index 0-8（黄金 levelIndex 契约）；v7/v8/v9 特性齐备", () => {
+    expect(LEVELS.length).toBeGreaterThanOrEqual(27);
+    // 顺序契约：黄金回放按 levelIndex 引用，v1-v9 永远占 0-8
+    for (let i = 0; i < 9; i++) expect(LEVELS[i].id).toBe(`v${i + 1}`);
     // v7：空白带内确实无点（575→335 之间）
     const gapHolds = LEVEL_V7.holds.filter((h) => h.y > 345 && h.y < 565);
     expect(gapHolds.length).toBe(0);
