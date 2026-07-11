@@ -1,0 +1,12 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2020", "DOM", "DOM.Iterable"],
+    "baseUrl": "../..",
+    "paths": {
+      "@kkc/core/*": ["packages/core/src/*"],
+      "@kkc/app/*": ["packages/app/src/*"]
+    }
+  },
+  "include": ["src"]
+}

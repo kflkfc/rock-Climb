@@ -1,0 +1,15 @@
+{
+  "name": "@kkc/tools",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "KingKong Climbing 开发工具：关卡编辑器（摆点/试玩/AI 定标/导出），不随游戏包发布",
+  "scripts": {
+    "dev": "vite --port 5199",
+    "build": "vite build"
+  },
+  "dependencies": {
+    "@kkc/app": "*",
+    "@kkc/core": "*"
+  }
+}

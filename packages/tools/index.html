@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>KKC 关卡编辑器</title>
+    <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body { width: 100%; height: 100%; overflow: hidden; background: #1c1c1c; font: 13px/1.5 system-ui, sans-serif; }
+      #root { display: flex; height: 100%; }
+      #stage { flex: 1; display: flex; align-items: center; justify-content: center; position: relative; }
+      canvas { background: #E6D9B5; box-shadow: 0 0 40px rgba(0,0,0,.5); touch-action: none; }
+      #side { width: 300px; background: #2B3933; color: #F5EBD3; padding: 12px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
+      #side h3 { color: #E5A636; font-size: 13px; margin-top: 6px; }
+      #side label { display: flex; justify-content: space-between; align-items: center; gap: 6px; }
+      #side input[type=number] { width: 70px; }
+      #side input[type=range] { flex: 1; }
+      #side select, #side button, #side input, #side textarea { font: inherit; }
+      #side button { padding: 5px 8px; cursor: pointer; background: #D64A47; color: #fff; border: 0; border-radius: 5px; }
+      #side button.alt { background: #5F9A6A; }
+      #side button.ghost { background: #4F5F58; }
+      #solveOut { background: rgba(0,0,0,.3); padding: 8px; border-radius: 6px; white-space: pre-wrap; font-family: ui-monospace, monospace; font-size: 12px; min-height: 64px; }
+      #io { width: 100%; height: 90px; font-family: ui-monospace, monospace; font-size: 11px; }
+      .row { display: flex; gap: 6px; }
+      .row > * { flex: 1; }
+      #mode { position: absolute; top: 10px; left: 10px; background: rgba(43,57,51,.9); color: #E5A636; padding: 4px 10px; border-radius: 6px; font-weight: 700; }
+    </style>
+  </head>
+  <body>
+    <div id="root">
+      <div id="stage"><canvas id="cv"></canvas><div id="mode">编辑模式</div></div>
+      <div id="side">
+        <h3>关卡</h3>
+        <label>id <input id="lvId" type="text" style="width:120px" /></label>
+        <label>名称 <input id="lvName" type="text" style="width:120px" /></label>
+        <label>难度 <input id="lvGrade" type="text" style="width:60px" /></label>
+        <label>墙角(底) <input id="wallBase" type="number" step="5" /></label>
+        <label>墙角(顶,空=同底) <input id="wallTop" type="number" step="5" /></label>
+
+        <h3>岩点工具（点空白处放置）</h3>
+        <label>类型 <select id="holdType"></select></label>
+        <div id="sel" style="display:none">
+          <h3>选中岩点 <span id="selId"></span></h3>
+          <label>半径 <input id="hRadius" type="range" min="6" max="50" step="1" /><span id="hRadiusV"></span></label>
+          <label>朝向° <input id="hDir" type="range" min="-180" max="180" step="5" /><span id="hDirV"></span></label>
+          <label>材质 <select id="hMat"><option value="normal">普通</option><option value="grippy">磨砂</option><option value="slick">光滑</option></select></label>
+          <label>起始肢 <select id="hStart"><option value="">无</option><option>LH</option><option>RH</option><option>LF</option><option>RF</option></select></label>
+          <label>终点 <input id="hGoal" type="checkbox" /></label>
+          <button id="delHold">🗑 删除此点 (Del)</button>
+        </div>
+
+        <h3>操作</h3>
+        <div class="row">
+          <button id="play" class="alt">▶ 试玩</button>
+          <button id="solve">🧠 求解定标</button>
+        </div>
+        <div id="solveOut">（求解结果显示在这里）</div>
+        <div class="row">
+          <button id="export" class="ghost">📤 导出 JSON</button>
+          <button id="import" class="ghost">📥 导入</button>
+        </div>
+        <textarea id="io" placeholder="LevelDef JSON"></textarea>
+        <div style="opacity:.6">编辑：点空白放点 · 拖点移动 · Del 删除<br/>试玩：正常游戏操作，Esc 回编辑</div>
+      </div>
+    </div>
+    <script type="module" src="/src/editor.ts"></script>
+  </body>
+</html>
