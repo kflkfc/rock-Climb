@@ -5,6 +5,8 @@ import { Limb } from "../model/skeleton.ts";
 import { buildRoute, buildRoof, WORLD_W, WORLD_H } from "./builders.ts";
 import { TUTORIAL_LEVELS } from "./tutorial.ts";
 import { SLAB_LEVELS, SLAB_SEQS } from "./slabGym.ts";
+import { MIXED_LEVELS, MIXED_SEQS } from "./mixedGym.ts";
+import { ROOF_LEVELS, ROOF_SEQS } from "./roofGym.ts";
 
 // ---- V1 KLIFR：基本垂直，15 点 ----
 const V1 = buildRoute({
@@ -205,6 +207,18 @@ const CALIBRATED: Record<string, { targetMoves: number; targetTimeSec: number }>
   s8: { targetMoves: 11, targetTimeSec: 80 },
   s9: { targetMoves: 11, targetTimeSec: 80 },
   s10: { targetMoves: 14, targetTimeSec: 95 },
+  // 综合馆补编 + 屋檐馆补编（2026-07-11 定标）
+  m1: { targetMoves: 12, targetTimeSec: 90 },
+  m2: { targetMoves: 12, targetTimeSec: 90 },
+  m3: { targetMoves: 12, targetTimeSec: 90 },
+  m4: { targetMoves: 15, targetTimeSec: 105 },
+  r1: { targetMoves: 11, targetTimeSec: 80 },
+  r2: { targetMoves: 11, targetTimeSec: 115 },
+  r3: { targetMoves: 11, targetTimeSec: 115 },
+  r4: { targetMoves: 11, targetTimeSec: 115 },
+  r5: { targetMoves: 11, targetTimeSec: 115 },
+  r6: { targetMoves: 8, targetTimeSec: 80 },
+  r7: { targetMoves: 12, targetTimeSec: 125 },
 };
 
 // ⚠ LEVELS 顺序契约：v1-v9 冻结于 index 0-8（黄金回放 levelIndex 引用），新内容只许尾部追加
@@ -220,6 +234,8 @@ export const LEVELS: LevelDef[] = [
   LEVEL_V9,
   ...TUTORIAL_LEVELS, // index 9-16
   ...SLAB_LEVELS, // index 17-26
+  ...MIXED_LEVELS, // index 27-30
+  ...ROOF_LEVELS, // index 31-37
 ].map((lv) => (CALIBRATED[lv.id] ? { ...lv, stars: CALIBRATED[lv.id] } : lv));
 
 /** 开发/测试用：各关一条参考攀爬序列。 */
@@ -233,4 +249,6 @@ export const LEVEL_SEQS: Record<string, [Limb, string][]> = {
   v8: V8.seq,
   v9: V9.seq,
   ...SLAB_SEQS,
+  ...MIXED_SEQS,
+  ...ROOF_SEQS,
 };

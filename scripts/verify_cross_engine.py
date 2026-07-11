@@ -1,7 +1,11 @@
 """Cross-engine determinism: replay each golden tape in the browser (V8/Blink)
 and compare state hash against the Node-recorded expected hash."""
-import json, glob, sys
+import json, glob, sys, os
 from playwright.sync_api import sync_playwright
+
+# WebKit 尊重系统代理（本机 Privoxy 会拦截 localhost 返回 500）——豁免本地地址
+os.environ["NO_PROXY"] = "localhost,127.0.0.1"
+os.environ["no_proxy"] = "localhost,127.0.0.1"
 
 goldens = sorted(glob.glob(r"D:\RockClimbGame\packages\core\tests\golden\*.json"))
 assert goldens, "no golden files found"
@@ -15,7 +19,8 @@ with sync_playwright() as p:
         page.on("pageerror", lambda e: errors.append(str(e)))
         page.goto("http://localhost:4173")
         page.wait_for_load_state("networkidle")
-        page.wait_for_timeout(800)
+        # 等到重演钩子就绪（WebKit 模块加载可能慢于固定延时）
+        page.wait_for_function("() => typeof window.__replayRun === 'function'", timeout=30000)
 
         for path in goldens:
             with open(path, encoding="utf8") as f:

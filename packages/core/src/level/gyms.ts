@@ -30,13 +30,13 @@ export const GYMS: GymDef[] = [
     name: "综合馆",
     desc: "指力与技术：直壁到微仰，读线能力的试金石",
     tint: "#D9D2C0",
-    levelIds: ["v1", "v2", "v3", "v4", "v8", "v7"], // P2-5 第二批补至 10
+    levelIds: ["v1", "v2", "m2", "v3", "v4", "m1", "v8", "v7", "m3", "m4"],
   },
   {
     id: "roof",
     name: "屋檐馆",
     desc: "力量与张力：陡仰到全屋檐，倒挂者的殿堂",
     tint: "#CBB8A6",
-    levelIds: ["v5", "v9", "v6"], // P2-5 第二批补至 10
+    levelIds: ["r1", "v5", "r2", "r3", "r4", "v9", "r5", "v6", "r6", "r7"],
   },
 ];
