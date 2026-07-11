@@ -9,11 +9,13 @@ import {
 } from "../src/progress/growth.ts";
 import { defaultSave } from "../src/progress/save.ts";
 import { characterById } from "../src/model/characters.ts";
-import { LEVEL_V7, LEVELS } from "../src/level/levels.ts";
+import { LEVELS } from "../src/level/levels.ts";
 import { Game } from "../src/sim/gameState.ts";
 import { LOGIC_DT } from "../src/replay/runner.ts";
 
-const L = LEVEL_V7; // stars: { targetMoves: 7, targetTimeSec: 60 }
+const L = LEVELS[6]; // v7（定标后目标从 LEVELS 取，勿用未定标的 LEVEL_V7 常量）
+const TM = L.stars!.targetMoves;
+const TT = L.stars!.targetTimeSec * 1000;
 
 describe("三星评定 · 分项判定", () => {
   it("★登顶：完攀即得，不限脱手", () => {
@@ -23,19 +25,19 @@ describe("三星评定 · 分项判定", () => {
   });
 
   it("★流畅：抓取≤目标 且 无脱手 且 无undo", () => {
-    const clean = { won: true, moves: 7, timeMs: 999000, slipped: false, undoUsed: false };
+    const clean = { won: true, moves: TM, timeMs: 999000000, slipped: false, undoUsed: false };
     expect(judgeStars(L, clean).flow).toBe(true);
-    expect(judgeStars(L, { ...clean, moves: 8 }).flow).toBe(false); // 超步数
+    expect(judgeStars(L, { ...clean, moves: TM + 1 }).flow).toBe(false); // 超步数
     expect(judgeStars(L, { ...clean, slipped: true }).flow).toBe(false); // 脱过手
     expect(judgeStars(L, { ...clean, undoUsed: true }).flow).toBe(false); // 用过 undo
   });
 
   it("★神速：用时≤目标（含重试计时）；一遍完美 = 3 星", () => {
-    const fast = { won: true, moves: 7, timeMs: 60000, slipped: false, undoUsed: false };
+    const fast = { won: true, moves: TM, timeMs: TT, slipped: false, undoUsed: false };
     expect(starCount(judgeStars(L, fast))).toBe(3);
-    expect(judgeStars(L, { ...fast, timeMs: 60001 }).speed).toBe(false);
+    expect(judgeStars(L, { ...fast, timeMs: TT + 1 }).speed).toBe(false);
     // 摔过但最后冲刺快：拿登顶+神速，丢流畅
-    const s = judgeStars(L, { won: true, moves: 7, timeMs: 50000, slipped: true, undoUsed: false });
+    const s = judgeStars(L, { won: true, moves: TM, timeMs: TT - 10000, slipped: true, undoUsed: false });
     expect(s).toEqual({ topped: true, flow: false, speed: true });
   });
 

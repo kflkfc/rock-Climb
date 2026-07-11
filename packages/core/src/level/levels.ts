@@ -362,6 +362,23 @@ export const LEVEL_V7 = V7_LEVEL;
 export const LEVEL_V8 = V8.level;
 export const LEVEL_V9 = V9.level;
 
+/**
+ * 星级目标定标（AI 试解器 2026-07-10 产出，solveLevel Lv10 基准）：
+ * targetMoves = max(最优×1.2, 最优+2)；targetTimeSec = 估时×1.8（陡墙步时加权）。
+ * 重新定标：npx vitest run calibrate（P2-4 编辑器上线后一键化）。
+ */
+const CALIBRATED: Record<string, { targetMoves: number; targetTimeSec: number }> = {
+  v1: { targetMoves: 9, targetTimeSec: 75 },
+  v2: { targetMoves: 11, targetTimeSec: 85 },
+  v3: { targetMoves: 21, targetTimeSec: 140 },
+  v4: { targetMoves: 8, targetTimeSec: 65 },
+  v5: { targetMoves: 12, targetTimeSec: 125 },
+  v6: { targetMoves: 7, targetTimeSec: 70 },
+  v7: { targetMoves: 5, targetTimeSec: 45 },
+  v8: { targetMoves: 8, targetTimeSec: 65 },
+  v9: { targetMoves: 12, targetTimeSec: 125 },
+};
+
 export const LEVELS: LevelDef[] = [
   LEVEL_V1,
   LEVEL_V2,
@@ -372,7 +389,7 @@ export const LEVELS: LevelDef[] = [
   LEVEL_V7,
   LEVEL_V8,
   LEVEL_V9,
-];
+].map((lv) => (CALIBRATED[lv.id] ? { ...lv, stars: CALIBRATED[lv.id] } : lv));
 
 /** 开发/测试用：各关一条参考攀爬序列。 */
 export const LEVEL_SEQS: Record<string, [Limb, string][]> = {
