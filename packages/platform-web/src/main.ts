@@ -15,6 +15,7 @@ import { drawGripRing } from "@kkc/app/render/drawGripRing.ts";
 import { drawHUD, HudHit } from "@kkc/app/render/drawHUD.ts";
 import { burstWin, updateEffects, drawEffects } from "@kkc/app/render/effects.ts";
 import { SaveManager } from "@kkc/core/progress/save.ts";
+import { evaluateAchievements } from "@kkc/core/progress/achievements.ts";
 import { installPointer } from "./input/pointer.ts";
 import { installTuningPanel } from "./ui/tuningPanel.ts";
 import { webPlatform } from "./webPlatform.ts";
@@ -27,11 +28,13 @@ const runner = new GameRunner(0);
 const game = runner.game;
 const cam = new Camera(1, 1, game.level);
 
-// 存档：启动即载入，套用设置与选手级别（在任何逻辑帧之前 → 属于 tape 起始条件）
+// 存档：启动即载入，套用设置/级别/熟练度（在任何逻辑帧之前 → 属于 tape 起始条件）。
+// 熟练度影响物理，只在 tape 起点注入——run 内涨的熟练度下次会话生效（回放确定性）。
 const save = new SaveManager(platform.storage, new Date().toISOString());
 platform.audio.setMuted(save.data.settings.muted);
 game.setClimberLevel(save.data.climberLevel);
-runner.restartTape(); // 重新快照起始条件（级别/调参），从干净的第 0 帧开始录
+game.setProficiency(save.data.proficiency ?? {});
+runner.restartTape(); // 重新快照起始条件（级别/角色/熟练度/调参），从干净的第 0 帧开始录
 const smoother = new PoseSmoother();
 let hud: HudHit | null = null;
 
@@ -69,6 +72,7 @@ game.onGrab = (match, grip) => {
 game.onSlip = () => platform.audio.slip();
 game.onDyno = () => platform.audio.dyno();
 game.onFall = () => save.recordAttempt(game.level.id);
+game.onInjury = () => platform.audio.slip(); // 暂复用脱手音（P3 专属音效）
 game.onWin = () => {
   const goal = game.holds.find((h) => h.isGoal)!;
   const s = cam.toScreen(goal.pos);
@@ -80,7 +84,28 @@ game.onWin = () => {
     Math.round(game.runTime * 1000),
     game.lastStars ?? { topped: true, flow: false, speed: false },
   );
+  // 成就评估（幂等）→ toast 队列
+  const news = evaluateAchievements(save.data);
+  if (news.length > 0) {
+    save.unlockAchievements(news.map((a) => a.id));
+    for (const a of news) toast(`🏆 成就解锁：${a.name} — ${a.desc}`);
+  }
 };
+
+// 轻量 DOM toast（P3 换正式 UI）
+const toastBox = document.createElement("div");
+toastBox.style.cssText =
+  "position:fixed;top:60px;left:50%;transform:translateX(-50%);z-index:20;display:flex;flex-direction:column;gap:6px;align-items:center;pointer-events:none";
+document.body.appendChild(toastBox);
+function toast(text: string) {
+  const el = document.createElement("div");
+  el.textContent = text;
+  el.style.cssText =
+    "background:rgba(43,57,51,.94);color:#F5EBD3;padding:8px 16px;border-radius:8px;font:600 14px system-ui;box-shadow:0 4px 14px rgba(0,0,0,.3);transition:opacity .5s";
+  toastBox.appendChild(el);
+  window.setTimeout(() => (el.style.opacity = "0"), 2600);
+  window.setTimeout(() => el.remove(), 3200);
+}
 
 // 键盘 1-9 切换线路（⤴ 按钮也可循环切换）
 window.addEventListener("keydown", (e) => {

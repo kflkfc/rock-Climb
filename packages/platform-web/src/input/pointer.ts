@@ -31,10 +31,11 @@ export function installPointer(
     const { sx, sy } = pt(e);
     const hud = getHud();
 
-    // HUD 图标：↻ 重置当前线路；⤴ 切到下一条线路
+    // HUD 图标：↻ 重置当前线路；⤴ 切到下一条线路；↶ 回退一步
     if (hud && hitIcon(sx, sy, hud.reset)) return runner.dispatch({ e: "reset" });
     if (hud && hitIcon(sx, sy, hud.exit))
       return runner.dispatch({ e: "level", i: (game.levelIndex + 1) % LEVELS.length });
+    if (hud && hitIcon(sx, sy, hud.undo)) return runner.dispatch({ e: "undo" });
 
     if (game.status === "won" || game.status === "fallen") return;
 

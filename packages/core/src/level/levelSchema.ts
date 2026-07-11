@@ -45,6 +45,8 @@ export interface LevelDef {
   starThreshold: number;
   /** v2 星级目标（AI 试解器定标）：★2流畅 ≤targetMoves；★3神速 ≤targetTimeSec */
   stars?: { targetMoves: number; targetTimeSec: number };
+  /** 规则变体（Klifur 式 "2×✋"）：每肢限动次数等 */
+  rules?: { maxMovesPerLimb?: number };
 }
 
 /** 段边界过渡带半宽（世界单位）：墙角在边界两侧各 50 内线性混合，防物理突变 */

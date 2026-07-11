@@ -89,6 +89,24 @@ export class Game {
   private runStarted = false;
   /** 完攀时的三星评定结果（won 状态下有效） */
   lastStars: StarResult | null = null;
+  // ---- undo 回退（罚流畅星；坠落/换关清栈；甩跳落点不可回退）----
+  private undoStack: {
+    limb: Limb;
+    prevHoldId: string | null;
+    prevGrip: GripMethod | null;
+    prevMatch: number;
+    prevContactDist: number;
+  }[] = [];
+  /** beginDrag 时缓存该肢离开的岩点（commitGrip 压栈用） */
+  private dragFrom: { limb: Limb; holdId: string | null; grip: GripMethod | null; match: number; contactDist: number } | null = null;
+  // ---- 抓法熟练度（tape 起点冻结）与指伤 ----
+  /** 熟练度快照：仅 setProficiency 更新（run 中途不变 → 回放确定）；影响 liveMatch */
+  proficiency: Record<string, number> = {};
+  /** 低熟练全扣的劳损累积（3 次触发指伤；确定性规则替代概率） */
+  injuryStrain = 0;
+  /** 指伤提示时间戳（HUD 2.5s 淡出） */
+  injuryNoticeT = -10;
+  onInjury?: () => void;
   /** 拖拽速度（世界单位/s，逻辑帧平滑）——甩出手势检测用 */
   private dragVel: Vec2 = v();
   private prevDragPos: Vec2 = v();
@@ -106,6 +124,8 @@ export class Game {
 
   levelIndex = 0;
   climberLevel = 5; // 选手级别 1-10（默认 5 老手；越高越强越不易掉）
+  /** 每肢累计移动次数（规则变体 maxMovesPerLimb 用；undo 会回退计数） */
+  movesBy: Record<Limb, number> = { LH: 0, RH: 0, LF: 0, RF: 0 };
   characterId = DEFAULT_CHARACTER_ID; // 角色阵容（体格预设 + 能力偏置）
 
   constructor(level: LevelDef) {
@@ -148,6 +168,8 @@ export class Game {
 
   load(level: LevelDef) {
     this.level = level;
+    this.injuryStrain = 0; // 换关 = 新的开始（指伤本体在 reset 中随 c 清零/保留）
+    this._freshInjury = true;
     this.holds = level.holds.map((h) =>
       makeHold(h.id, h.type, v(h.x, h.y), {
         radius: h.radius,
@@ -165,10 +187,11 @@ export class Game {
   }
 
   resetEpoch = 0;
+  private _freshInjury = false;
 
   /**
    * 复位到起始姿态。keepRun=true（坠落自动复位）保留 run 统计（计时/脱手记录延续）；
-   * false（手动重置/换关/换角色）开启全新 run。
+   * false（手动重置/换关/换角色）开启全新 run。指伤跨 reset 保留（身体状态），换关清零。
    */
   reset(keepRun = false) {
     this.resetEpoch++;
@@ -179,6 +202,11 @@ export class Game {
       this.runStarted = false;
       this.lastStars = null;
     }
+    this.undoStack.length = 0; // 复位后旧“来处”失效
+    this.dragFrom = null;
+    this.movesBy = { LH: 0, RH: 0, LF: 0, RF: 0 };
+    const carryInjuryT = this._freshInjury ? 0 : (this.c?.injuryT ?? 0);
+    this._freshInjury = false;
     const startOf = (l: Limb) => this.holds.find((h) => h.startLimb === l)!;
     const limbs = {} as Record<Limb, LimbState>;
     for (const l of LIMBS) {
@@ -230,6 +258,8 @@ export class Game {
         RF: { ...limbs.RF.freePos },
       },
       dyno: null,
+      proficiency: this.proficiency,
+      injuryT: carryInjuryT,
     };
     this.status = "climbing";
     this.gripCount = 0;
@@ -262,8 +292,19 @@ export class Game {
       }
     }
     if (!best) return false;
-    // 抓住的肢端被拖动 = 先脱离当前岩点
+    // 规则变体：每肢限动次数（Klifur 式 2×✋）——超限该肢不可再动（须在脱离前判定）
+    const maxMoves = this.level.rules?.maxMovesPerLimb;
+    if (maxMoves != null && this.movesBy[best] >= maxMoves) return false;
     const st = this.c.limbs[best];
+    // undo 用：缓存该肢离开前的抓握状态（必须在脱离之前记录！）
+    this.dragFrom = {
+      limb: best,
+      holdId: st.hold?.id ?? null,
+      grip: st.grip,
+      match: st.match,
+      contactDist: st.contactDist,
+    };
+    // 抓住的肢端被拖动 = 先脱离当前岩点
     st.attached = false;
     st.hold = null;
     st.grip = null;
@@ -434,15 +475,73 @@ export class Game {
 
   private commitGrip(l: Limb, hold: Hold, opt: GripOption, contactDist: number) {
     const st = this.c.limbs[l];
+    // undo 栈：记录该肢的"来处"（甩跳拍击落点不入栈——跳跃不可回退）
+    if (opt.grip !== "slap" && this.dragFrom && this.dragFrom.limb === l) {
+      this.undoStack.push({
+        limb: l,
+        prevHoldId: this.dragFrom.holdId,
+        prevGrip: this.dragFrom.grip,
+        prevMatch: this.dragFrom.match,
+        prevContactDist: this.dragFrom.contactDist,
+      });
+    } else if (opt.grip === "slap") {
+      this.undoStack.length = 0;
+    }
+    this.dragFrom = null;
     st.attached = true;
     st.hold = hold;
     st.grip = opt.grip;
     st.match = opt.match;
     st.contactDist = contactDist;
     this.gripCount++;
+    this.movesBy[l]++;
+    // 全扣劳损（GDD 反向激励）：低熟练连用 3 次 → 指伤 90s（确定性规则，非概率）
+    if (opt.grip === "full" && (this.proficiency["full"] ?? 0) < 40) {
+      this.injuryStrain++;
+      if (this.injuryStrain >= 3) {
+        this.injuryStrain = 0;
+        this.c.injuryT = 90;
+        this.injuryNoticeT = this.time;
+        this.onInjury?.();
+      }
+    }
     this.onGrab?.(opt.match, opt.grip);
     // 抓到终点岩点（且是手）→ 过关
     if (hold.isGoal && isHand(l)) this.triggerWin();
+  }
+
+  /** 回退一步：最近抓取的肢端退回它的"来处"。罚流畅星；腾空/拖拽中不可用 */
+  undo() {
+    if (this.status !== "climbing" || this.dragging || this.c.dyno) return;
+    const u = this.undoStack.pop();
+    if (!u) return;
+    const st = this.c.limbs[u.limb];
+    const prev = u.prevHoldId ? this.holds.find((h) => h.id === u.prevHoldId) : null;
+    if (prev) {
+      st.attached = true;
+      st.hold = prev;
+      st.grip = u.prevGrip;
+      st.match = u.prevMatch;
+      st.contactDist = u.prevContactDist;
+      st.freePos = { ...prev.pos };
+    } else {
+      st.freePos = st.hold ? { ...st.hold.pos } : { ...st.freePos };
+      st.attached = false;
+      st.hold = null;
+      st.grip = null;
+    }
+    this.movesBy[u.limb] = Math.max(0, this.movesBy[u.limb] - 1);
+    this.runUndoUsed = true; // 流畅星失效（登顶/神速不受影响——放心用 undo 学习）
+  }
+
+  get canUndo(): boolean {
+    return this.status === "climbing" && !this.dragging && !this.c.dyno && this.undoStack.length > 0;
+  }
+
+  /** 注入抓法熟练度（影响物理！只允许在 tape 起点调用——run 中途注入会破坏回放确定性） */
+  setProficiency(p: Record<string, number>) {
+    this.proficiency = { ...p };
+    if (this.c) this.c.proficiency = this.proficiency;
   }
 
   private holdAt(p: Vec2, l: Limb): Hold | null {

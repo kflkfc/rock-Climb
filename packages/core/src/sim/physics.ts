@@ -84,6 +84,10 @@ export interface Climber {
   /** Dyno 腾空状态（null=不在腾空）。t 累计秒；window 内需抓到点否则坠落；
    *  excluded = 起跳时释放的岩点 id（本次腾空不可重抓，否则永远飞不出去） */
   dyno: { t: number; leadLimb: Limb; excluded: string[] } | null;
+  /** 抓法熟练度快照（tape 起点冻结——run 内不变，保回放确定性）。60/90 档匹配加成 */
+  proficiency: Record<string, number>;
+  /** 指伤剩余秒（>0 时有效指力 ×0.8）。低熟练全扣劳损累积触发（gameState） */
+  injuryT: number;
 }
 
 /** 由 Climber 构造姿态解算所需的朝向对象 */
@@ -445,6 +449,9 @@ export function stepClimber(
   const Fpara = c.body.weight * para; // 沿墙下滑总力
   const Fperp = c.body.weight * perpPull; // 垂墙拉离总力（仰角才有）
 
+  // 指伤倒计时（有效指力在下方统一调制）
+  if (c.injuryT > 0) c.injuryT = Math.max(0, c.injuryT - dt);
+
   // 1+ 发力混合 → 自由肢端摆放 → 骨盆跟随 → 身体朝向 → 关节弯曲 → 姿态
   updatePullBlend(c, dt);
   solveFreeLimbs(c, dt, t);
@@ -520,16 +527,23 @@ export function stepClimber(
 
     const adapt = gripTypeScore(hold.type, st.grip!);
     const baseMatch = adapt * contactAreaScore(st.contactDist, hold.radius);
-    // 技术熟练（能力，0.5 中位 = ×1.0）：老手用同样的抓法更省力
-    const liveMatch = Math.max(0.05, baseMatch * alignEff * (0.9 + 0.2 * c.body.technique));
+    // 技术熟练（能力，0.5 中位=×1.0）× 抓法熟练度（60→+5%，90→+10%，越用越顺手）
+    const prof = c.proficiency[st.grip!] ?? 0;
+    const profMul = prof >= 90 ? 1.1 : prof >= 60 ? 1.05 : 1;
+    const liveMatch = Math.max(
+      0.05,
+      baseMatch * alignEff * (0.9 + 0.2 * c.body.technique) * profMul,
+    );
 
     // 抓力上限（体重单位），随对齐缩放：错向有效抓力骤降；不乘疲劳（耐力独立处理）。
     // 摩擦项（P1）：有效摩擦 = 类型摩擦 × 材质档位；光滑点抓力上限打折——Sloper 的命门。
+    // 指伤 debuff：伤着时有效指力 ×0.8（全扣的代价，GDD 反向激励）。
+    const effFinger = c.body.fingerStrength * (c.injuryT > 0 ? 0.8 : 1);
     const maxForce =
       hold.friendliness *
       (0.5 + 0.5 * adapt) *
       (0.55 + 0.45 * effectiveFriction(hold)) *
-      c.body.fingerStrength *
+      effFinger *
       t.capacity *
       t.maxForceK;
     // 张力对抗（两面性）：对抗度 → 消耗；陡仰(perpPull↑)上对拉压紧 → 抓力增益（核心调制）
@@ -546,7 +560,7 @@ export function stepClimber(
     // 与抓握耐力（能力，0.5 中位 = ×1.0）。
     const demand = isHand(l) ? hold.fingerDemand : 1;
     const drainRate =
-      (((load * demand) / liveMatch) * (1 / Math.max(0.2, c.body.fingerStrength)) *
+      (((load * demand) / liveMatch) * (1 / Math.max(0.2, effFinger)) *
         t.staminaDrain +
         tension) *
       hold.drainMul *

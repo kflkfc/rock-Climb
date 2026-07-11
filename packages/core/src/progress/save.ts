@@ -29,8 +29,10 @@ export interface SaveV2 {
   /** 按关卡 id 记录进度 */
   progress: Record<string, LevelProgress>;
   /** 抓法熟练度 0-100（使用即涨）。可选字段：老档缺省视为全 0。
-   *  P2-6 起接匹配加成/指伤（届时进回放初始条件） */
+   *  进物理（liveMatch 加成）——tape 起点冻结注入，run 内不变 */
   proficiency?: Record<string, number>;
+  /** 已解锁成就 id 列表（可选字段：老档缺省为空） */
+  achievements?: string[];
 }
 
 export type SaveData = SaveV2; // 最新版别名；升版时改指向
@@ -156,6 +158,15 @@ export class SaveManager {
 
   proficiencyOf(grip: string): number {
     return this.data.proficiency?.[grip] ?? 0;
+  }
+
+  /** 记录新解锁的成就 id（幂等去重）并落盘 */
+  unlockAchievements(ids: string[]): void {
+    if (ids.length === 0) return;
+    const owned = new Set(this.data.achievements ?? []);
+    for (const id of ids) owned.add(id);
+    this.data.achievements = [...owned];
+    this.persist();
   }
 
   setClimberLevel(n: number): void {

@@ -47,6 +47,9 @@ function applyEvent(game: Game, ev: Pending): void {
     case "chara":
       game.setCharacter(ev.id);
       break;
+    case "undo":
+      game.undo();
+      break;
   }
 }
 
@@ -61,6 +64,7 @@ export class GameRunner {
   private startClimberLevel: number;
   private startLevelIndex: number;
   private startCharacterId: string;
+  private startProficiency: Record<string, number>;
 
   constructor(levelIndex = 0, climberLevel?: number) {
     this.game = new Game(LEVELS[levelIndex]);
@@ -69,6 +73,7 @@ export class GameRunner {
     this.startClimberLevel = this.game.climberLevel;
     this.startLevelIndex = this.game.levelIndex;
     this.startCharacterId = this.game.characterId;
+    this.startProficiency = { ...this.game.proficiency };
   }
 
   /** UI 任意时刻调用；坐标事件量化后入队，下个逻辑帧生效 */
@@ -107,6 +112,7 @@ export class GameRunner {
     this.startClimberLevel = this.game.climberLevel;
     this.startLevelIndex = this.game.levelIndex;
     this.startCharacterId = this.game.characterId;
+    this.startProficiency = { ...this.game.proficiency };
   }
 
   /** 导出当前 tape 为回放文件（初始条件取 tape 起点快照，claim 取当前逻辑状态） */
@@ -118,6 +124,7 @@ export class GameRunner {
       levelIndex: this.startLevelIndex,
       climberLevel: this.startClimberLevel,
       characterId: this.startCharacterId,
+      proficiency: this.startProficiency,
       tuning: this.tuningSnapshot,
       events: this.tape.slice(),
       frames: this.frame,
@@ -149,6 +156,7 @@ export function replayRun(replay: Replay): ReplayResult {
     const game = new Game(LEVELS[replay.levelIndex]);
     game.setClimberLevel(replay.climberLevel);
     if (replay.characterId) game.setCharacter(replay.characterId); // 缺省=默认攀岩者（旧回放兼容）
+    game.setProficiency(replay.proficiency ?? {}); // 影响物理的初始条件
     let ei = 0;
     for (let f = 0; f < replay.frames; f++) {
       while (ei < replay.events.length && replay.events[ei].f === f) {

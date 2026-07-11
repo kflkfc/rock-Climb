@@ -47,6 +47,7 @@ export function stateHash(game: Game): string {
     f64bits(c.pose.com.y),
     c.fallen ? "1" : "0",
     c.dyno ? "d" + f64bits(c.dyno.t) + c.dyno.leadLimb + c.dyno.excluded.join(",") : "-", // 腾空态入指纹
+    f64bits(c.injuryT), // 指伤剩余（影响后续物理）
   ];
   for (const l of LIMBS) {
     const st = c.limbs[l];

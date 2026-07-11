@@ -10,6 +10,7 @@ const LIMB_LABEL = { LH: "左手", RH: "右手", LF: "左脚", RF: "右脚" } as
 export interface HudHit {
   reset: { x: number; y: number; r: number };
   exit: { x: number; y: number; r: number };
+  undo: { x: number; y: number; r: number };
 }
 
 function fmtTime(s: number): string {
@@ -69,12 +70,30 @@ export function drawHUD(ctx: CanvasRenderingContext2D, cam: Camera, game: Game):
     );
   }
 
-  // 左下：重置 + 退出 圆形图标
+  // 左下：重置 + 退出 + 回退 圆形图标（undo 罚流畅星；栈空时半透明）
   const ry = H - 40;
   const reset = { x: 36, y: ry, r: 22 };
   const exit = { x: 90, y: ry, r: 22 };
+  const undo = { x: 144, y: ry, r: 22 };
   iconBtn(ctx, reset.x, reset.y, reset.r, "↻");
   iconBtn(ctx, exit.x, exit.y, exit.r, "⤴");
+  ctx.globalAlpha = game.canUndo ? 1 : 0.35;
+  iconBtn(ctx, undo.x, undo.y, undo.r, "↶");
+  ctx.globalAlpha = 1;
+
+  // 指伤提示（2.5s 淡出）+ 指伤持续标记
+  if (game.time - game.injuryNoticeT < 2.5) {
+    ctx.textAlign = "center";
+    ctx.fillStyle = "#D64A47";
+    ctx.font = "700 16px system-ui, sans-serif";
+    ctx.fillText("🤕 手指拉伤！指力下降 90 秒（少用全扣）", W / 2, 68);
+  }
+  if (game.c.injuryT > 0) {
+    ctx.textAlign = "left";
+    ctx.fillStyle = "#D64A47";
+    ctx.font = "600 14px system-ui, sans-serif";
+    ctx.fillText(`🤕 ${Math.ceil(game.c.injuryT)}s`, 16, 114);
+  }
 
   // 过关浮层：三星分项（登顶/流畅/神速逐项显示）
   if (game.status === "won") {
@@ -116,7 +135,7 @@ export function drawHUD(ctx: CanvasRenderingContext2D, cam: Camera, game: Game):
     ctx.fillText("脱手！复位中…", W / 2, H / 2 - 14);
   }
 
-  return { reset, exit };
+  return { reset, exit, undo };
 }
 
 function iconBtn(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, ch: string) {
