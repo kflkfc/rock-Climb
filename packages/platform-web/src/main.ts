@@ -1,22 +1,18 @@
-// 引导：canvas / 60Hz 循环 / 串起 input → core → render。
+// Web 壳（P3 场景化后变薄）：canvas/DPR/RAF + 指针事件转发 + 存档/音频接线。
+// 游戏循环与交互逻辑都在 @kkc/app 的场景里（微信壳复用同一套场景，只换此文件）。
 
 import { LEVEL_SEQS } from "@kkc/core/level/levels.ts";
-import { wallAngleAtY } from "@kkc/core/level/levelSchema.ts";
-import { GameRunner, LOGIC_DT, replayRun } from "@kkc/core/replay/runner.ts";
+import { GameRunner, replayRun } from "@kkc/core/replay/runner.ts";
 import { Replay } from "@kkc/core/replay/format.ts";
-import { Camera } from "@kkc/app/render/camera.ts";
-import { drawWall } from "@kkc/app/render/drawWall.ts";
-import { drawHolds } from "@kkc/app/render/drawHolds.ts";
-import { drawReach } from "@kkc/app/render/drawReach.ts";
-import { drawCharacter } from "@kkc/app/render/drawCharacter.ts";
-import { drawStaminaRings } from "@kkc/app/render/drawStaminaRings.ts";
-import { PoseSmoother } from "@kkc/app/render/poseSmoother.ts";
-import { drawGripRing } from "@kkc/app/render/drawGripRing.ts";
-import { drawHUD, HudHit } from "@kkc/app/render/drawHUD.ts";
-import { burstWin, updateEffects, drawEffects } from "@kkc/app/render/effects.ts";
 import { SaveManager } from "@kkc/core/progress/save.ts";
 import { evaluateAchievements } from "@kkc/core/progress/achievements.ts";
-import { installPointer } from "./input/pointer.ts";
+import { GymDef } from "@kkc/core/level/gyms.ts";
+import { Camera } from "@kkc/app/render/camera.ts";
+import { SceneStack } from "@kkc/app/ui/scene.ts";
+import { MenuScene } from "@kkc/app/ui/menuScene.ts";
+import { GymScene } from "@kkc/app/ui/gymScene.ts";
+import { LevelSelectScene } from "@kkc/app/ui/levelSelectScene.ts";
+import { GameScene } from "@kkc/app/ui/gameScene.ts";
 import { installTuningPanel } from "./ui/tuningPanel.ts";
 import { webPlatform } from "./webPlatform.ts";
 
@@ -35,8 +31,6 @@ platform.audio.setMuted(save.data.settings.muted);
 game.setClimberLevel(save.data.climberLevel);
 game.setProficiency(save.data.proficiency ?? {});
 runner.restartTape(); // 重新快照起始条件（级别/角色/熟练度/调参），从干净的第 0 帧开始录
-const smoother = new PoseSmoother();
-let hud: HudHit | null = null;
 
 // 竖屏 9:16，适配视口
 function resize() {
@@ -59,24 +53,35 @@ function resize() {
 window.addEventListener("resize", resize);
 resize();
 
+// ---- 场景装配（导航闭环：菜单 → 岩馆 → 选关 → 游戏）----
+const stack = new SceneStack();
+const nav = {
+  menu: () => stack.replace(menuScene),
+  gyms: () => stack.push(new GymScene(save, { back: () => stack.pop(), levels: nav.levels })),
+  levels: (gym: GymDef) =>
+    stack.push(
+      new LevelSelectScene(gym, save, { back: () => stack.pop(), play: nav.play }),
+    ),
+  play: (levelIndex: number) =>
+    stack.push(new GameScene(runner, cam, save, { exit: () => stack.pop() }, levelIndex)),
+};
+const menuScene = new MenuScene(save, { gyms: nav.gyms });
+stack.push(menuScene);
+
 installTuningPanel(runner, save);
-installPointer(canvas, runner, cam, () => hud);
 
 // 音效 + 振动反馈（首次用户手势内解锁 AudioContext）
 canvas.addEventListener("pointerdown", () => platform.audio.unlock(), { once: true });
 game.onContact = () => platform.audio.contact();
 game.onGrab = (match, grip) => {
   platform.audio.grab(match);
-  save.bumpProficiency(grip); // 使用即涨（60/90 档加成 P2-6 接入物理）
+  save.bumpProficiency(grip); // 使用即涨（下次会话进物理——tape 起点冻结）
 };
 game.onSlip = () => platform.audio.slip();
 game.onDyno = () => platform.audio.dyno();
+game.onInjury = () => platform.audio.slip(); // 暂复用脱手音（P3-3 专属音效）
 game.onFall = () => save.recordAttempt(game.level.id);
-game.onInjury = () => platform.audio.slip(); // 暂复用脱手音（P3 专属音效）
 game.onWin = () => {
-  const goal = game.holds.find((h) => h.isGoal)!;
-  const s = cam.toScreen(goal.pos);
-  burstWin(s.x, s.y);
   platform.audio.win();
   save.recordWin(
     game.level.id,
@@ -84,7 +89,6 @@ game.onWin = () => {
     Math.round(game.runTime * 1000),
     game.lastStars ?? { topped: true, flow: false, speed: false },
   );
-  // 成就评估（幂等）→ toast 队列
   const news = evaluateAchievements(save.data);
   if (news.length > 0) {
     save.unlockAchievements(news.map((a) => a.id));
@@ -92,7 +96,7 @@ game.onWin = () => {
   }
 };
 
-// 轻量 DOM toast（P3 换正式 UI）
+// 轻量 DOM toast（正式成就页在 P3-2；微信端将换 Canvas toast）
 const toastBox = document.createElement("div");
 toastBox.style.cssText =
   "position:fixed;top:60px;left:50%;transform:translateX(-50%);z-index:20;display:flex;flex-direction:column;gap:6px;align-items:center;pointer-events:none";
@@ -107,88 +111,67 @@ function toast(text: string) {
   window.setTimeout(() => el.remove(), 3200);
 }
 
-// 键盘 1-9 切换线路（⤴ 按钮也可循环切换）
+// ---- 指针事件 → 场景栈 ----
+function pt(e: PointerEvent) {
+  const r = canvas.getBoundingClientRect();
+  return {
+    x: ((e.clientX - r.left) / r.width) * canvas.width,
+    y: ((e.clientY - r.top) / r.height) * canvas.height,
+  };
+}
+canvas.addEventListener("pointerdown", (e) => {
+  e.preventDefault();
+  canvas.setPointerCapture(e.pointerId);
+  stack.onDown(pt(e));
+});
+canvas.addEventListener("pointermove", (e) => {
+  e.preventDefault();
+  stack.onMove(pt(e));
+});
+const up = (e: PointerEvent) => {
+  e.preventDefault();
+  stack.onUp(pt(e));
+};
+canvas.addEventListener("pointerup", up);
+canvas.addEventListener("pointercancel", up);
+
+// 键盘 1-9 切换线路（开发捷径）
 window.addEventListener("keydown", (e) => {
   const n = parseInt(e.key, 10);
   if (!Number.isNaN(n) && n >= 1) runner.dispatch({ e: "level", i: n - 1 });
 });
 
-// 开发调试钩子（便于运行时检查状态，不影响玩法）
+// 开发调试钩子
 const dev = window as unknown as {
   __game: typeof game;
   __runner: GameRunner;
+  __stack: SceneStack;
   __seqs: typeof LEVEL_SEQS;
+  __step: (n?: number) => void;
   __exportReplay: () => Replay;
   __replayRun: (r: Replay) => { hash: string; claimOk: boolean };
 };
 dev.__game = game;
 dev.__runner = runner;
+dev.__stack = stack;
 dev.__seqs = LEVEL_SEQS;
-// 手动录制/校验回放（后续做成 UI；黄金回放跨引擎验证也走这里）
+// 驱动 n 个逻辑帧 + 渲染一次（仅 GameScene 语义下有意义；测试用）
+dev.__step = (n = 1) => {
+  for (let i = 0; i < n; i++) runner.step();
+  stack.draw(ctx, canvas.width, canvas.height, 1 / 60);
+};
 dev.__exportReplay = () => runner.exportReplay();
 dev.__replayRun = (r: Replay) => {
   const res = replayRun(r);
   return { hash: res.hash, claimOk: res.claimOk };
 };
 
-let lastLevelId = game.level.id;
-
-// ---- 确定性内核约束（GDD 3.3）：逻辑固定 60Hz 步长，渲染每 RAF 一次 ----
-// 逻辑只吃 LOGIC_DT（来自 core，唯一事实来源）；输入经 runner.dispatch 帧对齐生效
-// 并全程录制（现场即回放）；视觉平滑/摄像机/粒子吃真实 dt（不进回放）。
-
-const MAX_CATCHUP_STEPS = 5; // 卡顿追帧上限；超过则丢弃积压（防后台切回雪崩）
-
-function stepLogic() {
-  runner.step();
-}
-
-function render(dt: number) {
-  updateEffects(dt);
-
-  // 切换线路时同步摄像机（关卡尺寸/边界可能不同）
-  if (game.level.id !== lastLevelId) {
-    lastLevelId = game.level.id;
-    cam.setLevel(game.level);
-  }
-
-  // 平滑后的显示姿态（物理为逻辑帧瞬时值；平滑仅作用于显示，不回写逻辑）
-  const pose = smoother.update(game, dt);
-  cam.follow(pose.com.x, pose.com.y, dt);
-  cam.followAngle(wallAngleAtY(game.level, pose.com.y), dt); // 过角缓动旋转
-
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  drawWall(ctx, cam, game.level);
-  drawHolds(ctx, cam, game);
-  drawReach(ctx, cam, game);
-
-  drawCharacter(ctx, cam, pose, game);
-  drawStaminaRings(ctx, cam, game, pose);
-  drawEffects(ctx, cam, game);
-  drawGripRing(ctx, cam, game);
-  hud = drawHUD(ctx, cam, game);
-}
-
-// 开发调试：驱动 n 个逻辑帧 + 渲染一次（后台标签页 RAF 挂起时用于截图验证）
-(window as unknown as { __step: (n?: number) => void }).__step = (n = 1) => {
-  for (let i = 0; i < n; i++) stepLogic();
-  render(LOGIC_DT);
-};
-
+// ---- 渲染循环 ----
 let last = platform.now();
-let acc = 0;
 function frame(now: number) {
-  const real = Math.min(0.25, (now - last) / 1000);
+  const dt = Math.min(0.25, (now - last) / 1000);
   last = now;
-  acc += real;
-  let steps = 0;
-  while (acc >= LOGIC_DT && steps < MAX_CATCHUP_STEPS) {
-    stepLogic();
-    acc -= LOGIC_DT;
-    steps++;
-  }
-  if (steps === MAX_CATCHUP_STEPS) acc = 0; // 积压过多直接丢弃，宁可慢放不追爆
-  render(real);
+  stack.draw(ctx, canvas.width, canvas.height, dt);
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
