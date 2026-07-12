@@ -15,6 +15,7 @@ import { LevelSelectScene } from "@kkc/app/ui/levelSelectScene.ts";
 import { GameScene } from "@kkc/app/ui/gameScene.ts";
 import { CharacterScene } from "@kkc/app/ui/characterScene.ts";
 import { DailyScene } from "@kkc/app/ui/dailyScene.ts";
+import { LeaderboardScene, BoardData } from "@kkc/app/ui/leaderboardScene.ts";
 import { GrowthScene } from "@kkc/app/ui/growthScene.ts";
 import { AchievementScene } from "@kkc/app/ui/achievementScene.ts";
 import { SettingsScene } from "@kkc/app/ui/settingsScene.ts";
@@ -66,15 +67,27 @@ const nav = {
   levels: (gym: GymDef) =>
     stack.push(new LevelSelectScene(gym, save, { back, play: nav.play })),
   play: (levelIndex: number) =>
-    stack.push(new GameScene(runner, cam, save, { exit: back }, { levelIndex })),
+    stack.push(
+      new GameScene(runner, cam, save, { exit: back, leaderboard: nav.board }, { levelIndex }),
+    ),
   daily: () =>
     stack.push(
       new DailyScene(save, {
         back,
         play: (date: string) =>
-          stack.push(new GameScene(runner, cam, save, { exit: back }, { dailyDate: date })),
+          stack.push(
+            new GameScene(
+              runner,
+              cam,
+              save,
+              { exit: back, leaderboard: nav.board },
+              { dailyDate: date },
+            ),
+          ),
       }),
     ),
+  board: (levelId: string, levelName: string) =>
+    stack.push(new LeaderboardScene(levelId, levelName, fetchBoard, { back })),
   character: () => stack.push(new CharacterScene(save, runner, { back })),
   growth: () => stack.push(new GrowthScene(save, { back })),
   achievements: () => stack.push(new AchievementScene(save, { back })),
@@ -133,7 +146,44 @@ game.onWin = () => {
     save.unlockAchievements(news.map((a) => a.id));
     for (const a of news) toast(`🏆 成就解锁：${a.name} — ${a.desc}`);
   }
+  // 上榜（离线静默失败，不影响单机）。
+  // ⚠ 必须延迟到步进循环之外：onWin 在 runner.step 内部触发，此刻 frame 尚未++，
+  // 立即 exportReplay 会少最后一帧 → 服务端重演差一帧判 not_won。
+  window.setTimeout(() => void submitScore(), 300);
 };
+
+// ---- 排行榜服务对接（服务器地址：环境变量或同源 /api；未部署时静默离线）----
+const SERVER =
+  (import.meta as unknown as { env?: Record<string, string> }).env?.VITE_KKC_SERVER ??
+  "http://localhost:8787";
+
+async function submitScore() {
+  try {
+    let name = save.data.nickname;
+    if (!name) {
+      name = window.prompt("首次上榜！取个昵称（12 字内，可随时在设置改）：")?.trim() ?? "";
+      if (!name) return; // 不想上榜也行
+      save.setNickname(name);
+    }
+    const res = await fetch(`${SERVER}/score`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name, replay: runner.exportReplay() }),
+    });
+    if (res.ok) {
+      const b = (await res.json()) as { moveRank: number | null; timeRank: number | null };
+      toast(`🏅 已上榜：步数第 ${b.moveRank ?? ">100"} · 用时第 ${b.timeRank ?? ">100"}`);
+    }
+  } catch {
+    /* 离线/服务未部署：静默，游戏完全可玩 */
+  }
+}
+
+async function fetchBoard(levelId: string): Promise<BoardData> {
+  const res = await fetch(`${SERVER}/leaderboard?level=${encodeURIComponent(levelId)}`);
+  if (!res.ok) throw new Error("board fetch failed");
+  return (await res.json()) as BoardData;
+}
 
 // 轻量 DOM toast（正式成就页在 P3-2；微信端将换 Canvas toast）
 const toastBox = document.createElement("div");

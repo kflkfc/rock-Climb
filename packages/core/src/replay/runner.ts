@@ -107,6 +107,9 @@ export class GameRunner {
     this.frame++;
   }
 
+  /** tape 起点为每日挑战关时的日期（初始条件） */
+  private startDailyDate: string | undefined;
+
   /** 重新开始录制（换关/正式开始尝试时调用）：清空 tape、帧号归零、快照起始条件 */
   restartTape(): void {
     this.tape = [];
@@ -117,6 +120,9 @@ export class GameRunner {
     this.startLevelIndex = this.game.levelIndex;
     this.startCharacterId = this.game.characterId;
     this.startProficiency = { ...this.game.proficiency };
+    this.startDailyDate = this.game.level.id.startsWith("daily-")
+      ? this.game.level.id.slice("daily-".length)
+      : undefined;
   }
 
   /** 导出当前 tape 为回放文件（初始条件取 tape 起点快照，claim 取当前逻辑状态） */
@@ -124,18 +130,21 @@ export class GameRunner {
     return {
       schema: 1,
       coreVersion: CORE_VERSION,
-      levelId: LEVELS[this.startLevelIndex].id,
+      levelId: this.startDailyDate
+        ? `daily-${this.startDailyDate}`
+        : LEVELS[this.startLevelIndex].id,
       levelIndex: this.startLevelIndex,
       climberLevel: this.startClimberLevel,
       characterId: this.startCharacterId,
       proficiency: this.startProficiency,
+      ...(this.startDailyDate ? { dailyDate: this.startDailyDate } : {}),
       tuning: this.tuningSnapshot,
       events: this.tape.slice(),
       frames: this.frame,
       claim: {
         status: this.game.status,
         gripCount: this.game.gripCount,
-        timeMs: Math.round(this.game.time * 1000),
+        timeMs: Math.round(this.game.runTime * 1000), // 排行榜口径：首输入起算，含重试
       },
     };
   }
@@ -161,6 +170,7 @@ export function replayRun(replay: Replay): ReplayResult {
     game.setClimberLevel(replay.climberLevel);
     if (replay.characterId) game.setCharacter(replay.characterId); // 缺省=默认攀岩者（旧回放兼容）
     game.setProficiency(replay.proficiency ?? {}); // 影响物理的初始条件
+    if (replay.dailyDate) game.loadCustom(generateDaily(replay.dailyDate).level); // 每日关初始条件
     let ei = 0;
     for (let f = 0; f < replay.frames; f++) {
       while (ei < replay.events.length && replay.events[ei].f === f) {
@@ -172,7 +182,7 @@ export function replayRun(replay: Replay): ReplayResult {
     const claimOk =
       game.status === replay.claim.status &&
       game.gripCount === replay.claim.gripCount &&
-      Math.round(game.time * 1000) === replay.claim.timeMs;
+      Math.round(game.runTime * 1000) === replay.claim.timeMs;
     return { hash: stateHash(game), game, claimOk };
   } finally {
     Object.assign(tuning, saved);

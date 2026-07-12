@@ -1,0 +1,14 @@
+{
+  "name": "@kkc/server",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "KingKong Climbing 排行榜服务：重演反作弊 + 每关/每日榜。零运行时依赖（node:http），JSON 文件存储——部署时原样进云托管容器",
+  "scripts": {
+    "build": "esbuild src/index.ts --bundle --platform=node --format=esm --outfile=dist/server.mjs --external:node:*",
+    "start": "npm run build && node dist/server.mjs"
+  },
+  "dependencies": {
+    "@kkc/core": "*"
+  }
+}

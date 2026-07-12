@@ -33,6 +33,8 @@ export interface SaveV2 {
   proficiency?: Record<string, number>;
   /** 已解锁成就 id 列表（可选字段：老档缺省为空） */
   achievements?: string[];
+  /** 上榜昵称（首次提交时设置） */
+  nickname?: string;
 }
 
 export type SaveData = SaveV2; // 最新版别名；升版时改指向
@@ -158,6 +160,11 @@ export class SaveManager {
 
   proficiencyOf(grip: string): number {
     return this.data.proficiency?.[grip] ?? 0;
+  }
+
+  setNickname(n: string): void {
+    this.data.nickname = n.trim().slice(0, 12);
+    this.persist();
   }
 
   /** 记录新解锁的成就 id（幂等去重）并落盘 */

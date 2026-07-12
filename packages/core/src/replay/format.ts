@@ -29,6 +29,8 @@ export interface Replay {
   characterId?: string;
   /** tape 起点抓法熟练度快照（影响物理的初始条件；缺省 = 全 0） */
   proficiency?: Record<string, number>;
+  /** tape 起点为每日挑战时的日期（重演时按日期重生成关卡） */
+  dailyDate?: string;
   /** 录制时的物理调参快照（重演时临时生效，结束后还原） */
   tuning: Tuning;
   events: InputEvent[];

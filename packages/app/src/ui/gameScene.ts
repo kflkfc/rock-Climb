@@ -26,7 +26,7 @@ export class GameScene implements Scene {
   private acc = 0;
   private lastLevelId: string;
   private pointerActive = false;
-  private settleButtons: { again: Rect; next: Rect; back: Rect } | null = null;
+  private settleButtons: { again: Rect; next: Rect; back: Rect; board: Rect } | null = null;
   private hintFade = 0; // 教学气泡透明度
   private t = 0; // 动效计时
 
@@ -34,12 +34,20 @@ export class GameScene implements Scene {
     private runner: GameRunner,
     private cam: Camera,
     _save: SaveManager, // 存档由壳层经 game 回调写入；保留参数位供后续（结算最佳对比）
-    private nav: { exit: () => void },
-    entry?: { levelIndex?: number; dailyDate?: string },
+    private nav: { exit: () => void; leaderboard?: (levelId: string, levelName: string) => void },
+    private entry?: { levelIndex?: number; dailyDate?: string },
   ) {
-    if (entry?.dailyDate) this.runner.dispatch({ e: "daily", date: entry.dailyDate });
-    else if (entry?.levelIndex != null && entry.levelIndex !== this.runner.game.levelIndex)
-      this.runner.dispatch({ e: "level", i: entry.levelIndex });
+    this.lastLevelId = this.runner.game.level.id;
+  }
+
+  /** 进关：切目标关 → 立即生效 → 重开 tape——回放 = 干净的单关尝试（提交排行榜用） */
+  enter() {
+    if (this.entry?.dailyDate) this.runner.dispatch({ e: "daily", date: this.entry.dailyDate });
+    else if (this.entry?.levelIndex != null)
+      this.runner.dispatch({ e: "level", i: this.entry.levelIndex });
+    else this.runner.dispatch({ e: "reset" }); // 无目标=重进当前关，也开新尝试
+    this.runner.step(); // 事件立即生效（切关/复位完成）
+    this.runner.restartTape(); // tape 起点 = 本关起始状态（含 daily 初始条件快照）
     this.lastLevelId = this.runner.game.level.id;
   }
 
@@ -139,10 +147,12 @@ export class GameScene implements Scene {
         again: { x: x0, y, w: bw, h: bh },
         next: { x: x0 + bw + gap, y, w: bw, h: bh },
         back: { x: x0 + (bw + gap) * 2, y, w: bw, h: bh },
+        board: { x: w / 2 - 130, y: y + bh + 12, w: 260, h: 40 },
       };
       drawButton(ctx, this.settleButtons.again, "↻ 再来", { color: THEME.green, fontPx: 17 });
       drawButton(ctx, this.settleButtons.next, "下一关 ›", { fontPx: 17 });
       drawButton(ctx, this.settleButtons.back, "选关", { color: THEME.wood, fontPx: 17 });
+      drawButton(ctx, this.settleButtons.board, "🏅 排行榜", { color: THEME.dark, fontPx: 15 });
     } else {
       this.settleButtons = null;
     }
@@ -152,12 +162,19 @@ export class GameScene implements Scene {
     const game = this.game;
     const cam = this.cam;
 
-    // 结算按钮
+    // 结算按钮（再来/下一关都重开 tape：每次提交都是干净的单关回放）
     if (this.settleButtons) {
-      if (inRect(e, this.settleButtons.again)) return this.runner.dispatch({ e: "reset" });
-      if (inRect(e, this.settleButtons.next))
-        return this.runner.dispatch({ e: "level", i: (game.levelIndex + 1) % LEVELS.length });
+      if (inRect(e, this.settleButtons.again)) {
+        this.entry = this.entry?.dailyDate ? this.entry : { levelIndex: game.levelIndex };
+        return this.enter();
+      }
+      if (inRect(e, this.settleButtons.next)) {
+        this.entry = { levelIndex: (game.levelIndex + 1) % LEVELS.length };
+        return this.enter();
+      }
       if (inRect(e, this.settleButtons.back)) return this.nav.exit();
+      if (inRect(e, this.settleButtons.board))
+        return this.nav.leaderboard?.(game.level.id, game.level.name);
     }
 
     const hitIcon = (ic?: { x: number; y: number; r: number }) =>
