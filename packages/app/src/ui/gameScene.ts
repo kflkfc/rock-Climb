@@ -27,6 +27,8 @@ export class GameScene implements Scene {
   private lastLevelId: string;
   private pointerActive = false;
   private settleButtons: { again: Rect; next: Rect; back: Rect } | null = null;
+  private hintFade = 0; // 教学气泡透明度
+  private t = 0; // 动效计时
 
   constructor(
     private runner: GameRunner,
@@ -74,6 +76,56 @@ export class GameScene implements Scene {
     drawEffects(ctx, this.cam, game);
     drawGripRing(ctx, this.cam, game);
     this.hud = drawHUD(ctx, this.cam, game);
+
+    // 教学引导层：进关未操作时显示 hint 气泡（开始拖拽后淡出）；t1 加脉冲手指
+    this.hintFade += (game.started || !game.level.hint ? -3 : 3) * dt;
+    this.hintFade = Math.max(0, Math.min(1, this.hintFade));
+    if (this.hintFade > 0.01 && game.level.hint) {
+      const alpha = this.hintFade;
+      const pad = 18;
+      const bw2 = Math.min(400, w - 40);
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      // 自动换行
+      ctx.font = "600 15px system-ui, sans-serif";
+      const chars = game.level.hint.split("");
+      const lines: string[] = [];
+      let line = "";
+      for (const c of chars) {
+        if (ctx.measureText(line + c).width > bw2 - pad * 2) {
+          lines.push(line);
+          line = c;
+        } else line += c;
+      }
+      if (line) lines.push(line);
+      const bh2 = lines.length * 22 + pad * 2;
+      const bx = w / 2 - bw2 / 2;
+      const by = h * 0.62;
+      ctx.fillStyle = "rgba(43,57,51,0.92)";
+      ctx.beginPath();
+      ctx.roundRect(bx, by, bw2, bh2, 12);
+      ctx.fill();
+      ctx.fillStyle = "#F5EBD3";
+      ctx.textAlign = "left";
+      ctx.textBaseline = "top";
+      lines.forEach((ln, i) => ctx.fillText(ln, bx + pad, by + pad + i * 22));
+      // t1：从右手把手到终点的脉冲手指
+      if (game.level.id === "t1") {
+        this.t += dt;
+        const rh = game.c.limbs.RH;
+        const from = this.cam.toScreen(rh.hold ? rh.hold.pos : rh.freePos);
+        const goal = game.holds.find((hd) => hd.isGoal);
+        if (goal) {
+          const to = this.cam.toScreen(goal.pos);
+          const k = (Math.sin(this.t * 2.4) + 1) / 2; // 0..1 往返
+          ctx.font = "34px system-ui, sans-serif";
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.fillText("👆", from.x + (to.x - from.x) * k, from.y + (to.y - from.y) * k + 22);
+        }
+      }
+      ctx.restore();
+    }
 
     // 结算按钮（won 时）：再来一次 / 下一关 / 返回选关
     if (game.status === "won") {

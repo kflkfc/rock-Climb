@@ -33,9 +33,10 @@ export function drawWall(ctx: CanvasRenderingContext2D, cam: Camera, level: Leve
   // 按可视区顶/底的世界高度取墙角 → 竖向亮度渐变（支持变墙角关卡：底亮直壁→顶暗仰角）
   const angTop = wallAngleAtY(level, cam.toWorld(0, 0).y);
   const angBot = wallAngleAtY(level, cam.toWorld(0, cam.canvasH).y);
+  const hue = level.wallHue ?? 43; // 三馆视觉差异：板墙暖米 / 综合灰岩 / 屋檐暗红
   const grad = ctx.createLinearGradient(0, 0, 0, cam.canvasH);
-  grad.addColorStop(0, `hsl(43 38% ${wallLightness(angTop)}%)`);
-  grad.addColorStop(1, `hsl(43 38% ${wallLightness(angBot)}%)`);
+  grad.addColorStop(0, `hsl(${hue} 38% ${wallLightness(angTop)}%)`);
+  grad.addColorStop(1, `hsl(${hue} 38% ${wallLightness(angBot)}%)`);
   ctx.fillStyle = grad;
   ctx.fillRect(0, 0, cam.canvasW, cam.canvasH);
 

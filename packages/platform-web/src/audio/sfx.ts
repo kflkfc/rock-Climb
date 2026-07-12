@@ -47,10 +47,31 @@ function tone(freq: number, dur: number, type: OscillatorType, gain: number, del
   osc.stop(t0 + dur + 0.02);
 }
 
+// ---- 程序化 lo-fi BGM（零素材零包体）：五声音阶琶音 + 缓慢和弦轮换 ----
+let bgmTimer: number | null = null;
+let bgmStep = 0;
+// C 五声（C D E G A）两组八度的琶音序列；每 8 步换和弦根音
+const BGM_SCALE = [261.6, 293.7, 329.6, 392.0, 440.0];
+const BGM_PATTERN = [0, 2, 4, 2, 1, 3, 4, 3]; // 音阶索引序列
+const BGM_ROOTS = [1, 0.75, 0.84, 0.667]; // 根音倍率（C/G/A/F 感）
+
+function bgmTick() {
+  if (muted) return;
+  const c = ac();
+  if (!c || !master) return;
+  const bar = Math.floor(bgmStep / 8) % BGM_ROOTS.length;
+  const idx = BGM_PATTERN[bgmStep % 8];
+  const freq = BGM_SCALE[idx] * BGM_ROOTS[bar] * (bgmStep % 16 >= 8 ? 2 : 1);
+  tone(freq, 0.9, "sine", 0.045); // 极轻，垫底氛围
+  if (bgmStep % 8 === 0) tone(BGM_SCALE[0] * BGM_ROOTS[bar] * 0.5, 1.8, "triangle", 0.03); // 低音垫
+  bgmStep++;
+}
+
 export const sfx = {
   /** 浏览器自动播放策略：需在用户手势内创建/恢复 AudioContext */
   unlock() {
     ac();
+    if (bgmTimer == null) bgmTimer = window.setInterval(bgmTick, 480); // ~125bpm 八分音
   },
 
   /** 接触锁定：轻"咔" */

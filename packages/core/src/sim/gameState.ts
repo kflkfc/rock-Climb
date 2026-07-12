@@ -534,6 +534,11 @@ export class Game {
     this.runUndoUsed = true; // 流畅星失效（登顶/神速不受影响——放心用 undo 学习）
   }
 
+  /** 本 run 是否已有过输入（教学引导层的淡出时机） */
+  get started(): boolean {
+    return this.runStarted;
+  }
+
   get canUndo(): boolean {
     return this.status === "climbing" && !this.dragging && !this.c.dyno && this.undoStack.length > 0;
   }

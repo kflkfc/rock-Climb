@@ -7,6 +7,7 @@ import { TUTORIAL_LEVELS } from "./tutorial.ts";
 import { SLAB_LEVELS, SLAB_SEQS } from "./slabGym.ts";
 import { MIXED_LEVELS, MIXED_SEQS } from "./mixedGym.ts";
 import { ROOF_LEVELS, ROOF_SEQS } from "./roofGym.ts";
+import { GYMS } from "./gyms.ts";
 
 // ---- V1 KLIFR：基本垂直，15 点 ----
 const V1 = buildRoute({
@@ -221,6 +222,13 @@ const CALIBRATED: Record<string, { targetMoves: number; targetTimeSec: number }>
   r7: { targetMoves: 12, targetTimeSec: 125 },
 };
 
+// 三馆视觉差异（GDD 4.7）：墙面 HSL 色相按所属岩馆
+const GYM_HUE: Record<string, number> = { tutorial: 43, slab: 47, mixed: 36, roof: 20 };
+function hueOf(id: string): number | undefined {
+  for (const g of GYMS) if (g.levelIds.includes(id)) return GYM_HUE[g.id];
+  return undefined;
+}
+
 // ⚠ LEVELS 顺序契约：v1-v9 冻结于 index 0-8（黄金回放 levelIndex 引用），新内容只许尾部追加
 export const LEVELS: LevelDef[] = [
   LEVEL_V1,
@@ -236,7 +244,11 @@ export const LEVELS: LevelDef[] = [
   ...SLAB_LEVELS, // index 17-26
   ...MIXED_LEVELS, // index 27-30
   ...ROOF_LEVELS, // index 31-37
-].map((lv) => (CALIBRATED[lv.id] ? { ...lv, stars: CALIBRATED[lv.id] } : lv));
+].map((lv) => ({
+  ...lv,
+  ...(CALIBRATED[lv.id] ? { stars: CALIBRATED[lv.id] } : {}),
+  ...(hueOf(lv.id) != null ? { wallHue: hueOf(lv.id) } : {}),
+}));
 
 /** 开发/测试用：各关一条参考攀爬序列。 */
 export const LEVEL_SEQS: Record<string, [Limb, string][]> = {
