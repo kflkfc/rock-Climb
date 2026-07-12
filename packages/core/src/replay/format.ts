@@ -16,7 +16,8 @@ export type InputEvent =
   | { f: number; e: "level"; i: number } // 切换到关卡序号 i
   | { f: number; e: "climber"; n: number } // 选手级别 1-10
   | { f: number; e: "chara"; id: string } // 切换角色（体格预设变化 → 重开本线）
-  | { f: number; e: "undo" }; // 回退一步（罚流畅星）
+  | { f: number; e: "undo" } // 回退一步（罚流畅星）
+  | { f: number; e: "daily"; date: string }; // 载入每日挑战（date→seed 确定性重生成）
 
 export interface Replay {
   schema: 1;

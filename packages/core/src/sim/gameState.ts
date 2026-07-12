@@ -166,6 +166,11 @@ export class Game {
     this.load(LEVELS[i]);
   }
 
+  /** 加载 LEVELS 之外的关卡（每日挑战等生成关）；levelIndex 保持不变 */
+  loadCustom(level: LevelDef) {
+    this.load(level);
+  }
+
   load(level: LevelDef) {
     this.level = level;
     this.injuryStrain = 0; // 换关 = 新的开始（指伤本体在 reset 中随 c 清零/保留）

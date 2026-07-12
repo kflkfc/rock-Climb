@@ -14,6 +14,7 @@ import { GymScene } from "@kkc/app/ui/gymScene.ts";
 import { LevelSelectScene } from "@kkc/app/ui/levelSelectScene.ts";
 import { GameScene } from "@kkc/app/ui/gameScene.ts";
 import { CharacterScene } from "@kkc/app/ui/characterScene.ts";
+import { DailyScene } from "@kkc/app/ui/dailyScene.ts";
 import { GrowthScene } from "@kkc/app/ui/growthScene.ts";
 import { AchievementScene } from "@kkc/app/ui/achievementScene.ts";
 import { SettingsScene } from "@kkc/app/ui/settingsScene.ts";
@@ -65,7 +66,15 @@ const nav = {
   levels: (gym: GymDef) =>
     stack.push(new LevelSelectScene(gym, save, { back, play: nav.play })),
   play: (levelIndex: number) =>
-    stack.push(new GameScene(runner, cam, save, { exit: back }, levelIndex)),
+    stack.push(new GameScene(runner, cam, save, { exit: back }, { levelIndex })),
+  daily: () =>
+    stack.push(
+      new DailyScene(save, {
+        back,
+        play: (date: string) =>
+          stack.push(new GameScene(runner, cam, save, { exit: back }, { dailyDate: date })),
+      }),
+    ),
   character: () => stack.push(new CharacterScene(save, runner, { back })),
   growth: () => stack.push(new GrowthScene(save, { back })),
   achievements: () => stack.push(new AchievementScene(save, { back })),
@@ -90,6 +99,7 @@ const nav = {
 };
 const menuScene = new MenuScene(save, {
   gyms: nav.gyms,
+  daily: nav.daily,
   character: nav.character,
   growth: nav.growth,
   achievements: nav.achievements,

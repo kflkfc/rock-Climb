@@ -13,6 +13,7 @@ export class MenuScene implements Scene {
     private save: SaveManager,
     private nav: {
       gyms: () => void;
+      daily?: () => void;
       character?: () => void;
       growth?: () => void;
       achievements?: () => void;
@@ -50,17 +51,18 @@ export class MenuScene implements Scene {
 
     // 导航按钮
     const bw = Math.min(300, w * 0.7);
-    const bh = 54;
+    const bh = 50;
     const x = w / 2 - bw / 2;
-    let y = h * 0.48;
+    let y = h * 0.46;
     this.buttons = [];
     const add = (label: string, go?: () => void, color?: string) => {
       const r = { x, y, w: bw, h: bh };
-      drawButton(ctx, r, label, { color, disabled: !go });
+      drawButton(ctx, r, label, { color, disabled: !go, fontPx: 18 });
       this.buttons.push({ r, label, go });
-      y += bh + 16;
+      y += bh + 13;
     };
     add("▶  开始攀爬", this.nav.gyms);
+    add("📅  每日挑战", this.nav.daily, "#C96A2F");
     add("🧍  角色", this.nav.character, THEME.green);
     add("📈  成长", this.nav.growth, THEME.gold);
     add("🏆  成就", this.nav.achievements, THEME.wood);

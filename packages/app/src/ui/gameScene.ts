@@ -35,10 +35,11 @@ export class GameScene implements Scene {
     private cam: Camera,
     _save: SaveManager, // 存档由壳层经 game 回调写入；保留参数位供后续（结算最佳对比）
     private nav: { exit: () => void },
-    levelIndex?: number,
+    entry?: { levelIndex?: number; dailyDate?: string },
   ) {
-    if (levelIndex != null && levelIndex !== this.runner.game.levelIndex)
-      this.runner.dispatch({ e: "level", i: levelIndex });
+    if (entry?.dailyDate) this.runner.dispatch({ e: "daily", date: entry.dailyDate });
+    else if (entry?.levelIndex != null && entry.levelIndex !== this.runner.game.levelIndex)
+      this.runner.dispatch({ e: "level", i: entry.levelIndex });
     this.lastLevelId = this.runner.game.level.id;
   }
 

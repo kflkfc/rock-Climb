@@ -10,10 +10,13 @@ import { CharacterDef } from "../model/characters.ts";
 /** 晋升到 Lv(index+1) 所需累计星（Lv1 无门槛）。初版阈值，P7 用真实数据校准 */
 export const LEVEL_STAR_THRESHOLDS = [0, 6, 12, 20, 30, 42, 55, 68, 80, 90];
 
-/** 累计星池：全部关卡三星分项并集之和 */
+/** 累计星池：官方关卡三星并集之和。每日挑战星不入池（GDD 4.3.1：防无限膨胀） */
 export function totalStars(save: SaveData): number {
   let sum = 0;
-  for (const p of Object.values(save.progress)) sum += starCount(p.stars);
+  for (const [id, p] of Object.entries(save.progress)) {
+    if (id.startsWith("daily-")) continue;
+    sum += starCount(p.stars);
+  }
   return sum;
 }
 

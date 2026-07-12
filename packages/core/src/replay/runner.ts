@@ -5,6 +5,7 @@
 
 import { Game } from "../sim/gameState.ts";
 import { LEVELS } from "../level/levels.ts";
+import { generateDaily } from "../level/generator.ts";
 import { v } from "../math/vec2.ts";
 import { tuning, Tuning } from "../config/tuning.ts";
 import { CORE_VERSION } from "../version.ts";
@@ -49,6 +50,9 @@ function applyEvent(game: Game, ev: Pending): void {
       break;
     case "undo":
       game.undo();
+      break;
+    case "daily":
+      game.loadCustom(generateDaily(ev.date).level); // 同 date ⇒ 同 seed ⇒ 同关（确定性）
       break;
   }
 }
