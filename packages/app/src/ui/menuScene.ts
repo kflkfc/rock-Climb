@@ -11,7 +11,13 @@ export class MenuScene implements Scene {
 
   constructor(
     private save: SaveManager,
-    private nav: { gyms: () => void; character?: () => void; achievements?: () => void; settings?: () => void },
+    private nav: {
+      gyms: () => void;
+      character?: () => void;
+      growth?: () => void;
+      achievements?: () => void;
+      settings?: () => void;
+    },
   ) {}
 
   draw(ctx: CanvasRenderingContext2D, w: number, h: number, dt: number) {
@@ -56,6 +62,7 @@ export class MenuScene implements Scene {
     };
     add("▶  开始攀爬", this.nav.gyms);
     add("🧍  角色", this.nav.character, THEME.green);
+    add("📈  成长", this.nav.growth, THEME.gold);
     add("🏆  成就", this.nav.achievements, THEME.wood);
     add("⚙  设置", this.nav.settings, THEME.dark);
 

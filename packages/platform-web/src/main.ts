@@ -13,6 +13,10 @@ import { MenuScene } from "@kkc/app/ui/menuScene.ts";
 import { GymScene } from "@kkc/app/ui/gymScene.ts";
 import { LevelSelectScene } from "@kkc/app/ui/levelSelectScene.ts";
 import { GameScene } from "@kkc/app/ui/gameScene.ts";
+import { CharacterScene } from "@kkc/app/ui/characterScene.ts";
+import { GrowthScene } from "@kkc/app/ui/growthScene.ts";
+import { AchievementScene } from "@kkc/app/ui/achievementScene.ts";
+import { SettingsScene } from "@kkc/app/ui/settingsScene.ts";
 import { installTuningPanel } from "./ui/tuningPanel.ts";
 import { webPlatform } from "./webPlatform.ts";
 
@@ -55,17 +59,42 @@ resize();
 
 // ---- 场景装配（导航闭环：菜单 → 岩馆 → 选关 → 游戏）----
 const stack = new SceneStack();
+const back = () => stack.pop();
 const nav = {
-  menu: () => stack.replace(menuScene),
-  gyms: () => stack.push(new GymScene(save, { back: () => stack.pop(), levels: nav.levels })),
+  gyms: () => stack.push(new GymScene(save, { back, levels: nav.levels })),
   levels: (gym: GymDef) =>
-    stack.push(
-      new LevelSelectScene(gym, save, { back: () => stack.pop(), play: nav.play }),
-    ),
+    stack.push(new LevelSelectScene(gym, save, { back, play: nav.play })),
   play: (levelIndex: number) =>
-    stack.push(new GameScene(runner, cam, save, { exit: () => stack.pop() }, levelIndex)),
+    stack.push(new GameScene(runner, cam, save, { exit: back }, levelIndex)),
+  character: () => stack.push(new CharacterScene(save, runner, { back })),
+  growth: () => stack.push(new GrowthScene(save, { back })),
+  achievements: () => stack.push(new AchievementScene(save, { back })),
+  settings: () =>
+    stack.push(
+      new SettingsScene(save, {
+        back,
+        setMuted: (m) => platform.audio.setMuted(m),
+        exportSave: () => window.prompt("复制以下存档 JSON 备份：", save.export()),
+        importSave: () => {
+          const t = window.prompt("粘贴存档 JSON：");
+          if (!t) return;
+          if (save.import(t)) location.reload();
+          else window.alert("存档无效，未做任何改动");
+        },
+        wipeSave: () => {
+          save.wipe(new Date().toISOString());
+          location.reload();
+        },
+      }),
+    ),
 };
-const menuScene = new MenuScene(save, { gyms: nav.gyms });
+const menuScene = new MenuScene(save, {
+  gyms: nav.gyms,
+  character: nav.character,
+  growth: nav.growth,
+  achievements: nav.achievements,
+  settings: nav.settings,
+});
 stack.push(menuScene);
 
 installTuningPanel(runner, save);
