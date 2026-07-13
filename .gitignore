@@ -19,3 +19,6 @@ Thumbs.db
 # 录屏与压缩包保留在本地 RockClimbing Game/ 下
 *.mp4
 *.zip
+
+# 设计文档仅保存本地，不上传 GitHub
+RockClimbing Game/
