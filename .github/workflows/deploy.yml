@@ -29,7 +29,11 @@ jobs:
       - run: npm ci
       - run: npm test
       - run: npm run build
+      # enablement: 历史重写强推后 GitHub 曾把 Pages 站点下线（configure-pages 404），
+      # 站点不存在时由工作流自动重新启用（需要上方 pages: write 权限）。
       - uses: actions/configure-pages@v6
+        with:
+          enablement: true
       - uses: actions/upload-pages-artifact@v5
         with:
           path: packages/platform-web/dist
