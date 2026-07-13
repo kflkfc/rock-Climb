@@ -43,6 +43,14 @@ export class SettingsScene implements Scene {
       },
       THEME.green,
     );
+    add(
+      () =>
+        this.save.data.settings.testMode
+          ? "🧪 测试模式：开（全角色解锁）"
+          : "🧪 测试模式：关（点击开启）",
+      () => this.save.setTestMode(!this.save.data.settings.testMode),
+      this.save.data.settings.testMode ? THEME.green : THEME.wood,
+    );
     add(() => "📤 导出存档（备份）", this.hooks.exportSave, THEME.wood);
     add(() => "📥 导入存档", this.hooks.importSave, THEME.wood);
     add(
@@ -61,6 +69,7 @@ export class SettingsScene implements Scene {
     ctx.textAlign = "center";
     ctx.fillStyle = "rgba(79,63,48,0.5)";
     ctx.font = "12px system-ui, sans-serif";
+    ctx.fillText("测试模式解锁全角色；所有关卡/岩馆本就可自由进入", w / 2, h - 36);
     ctx.fillText("物理调参面板：右上角 ⚙（开发工具，正式版隐藏）", w / 2, h - 20);
   }
 

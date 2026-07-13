@@ -112,4 +112,23 @@ describe("存档 · SaveManager", () => {
     expect(again.data.climberLevel).toBe(8);
     expect(store.map.has(SAVE_KEY)).toBe(true);
   });
+
+  it("测试模式开关持久化，且可选字段往返无损（老档缺省为关）", () => {
+    const store = memStore();
+    const m = new SaveManager(store);
+    expect(m.data.settings.testMode).toBeUndefined(); // 默认档：缺省
+    m.setTestMode(true);
+    // 落盘并被新管理器还原
+    const again = new SaveManager(store);
+    expect(again.data.settings.testMode).toBe(true);
+    expect(again.data.settings.muted).toBe(false); // 不误伤其它设置
+    again.setTestMode(false);
+    expect(new SaveManager(store).data.settings.testMode).toBe(false);
+    // 缺省 testMode 的档仍能解析（可选字段前向兼容）
+    const legacy = parseSave(
+      JSON.stringify({ ...defaultSave("t"), settings: { muted: true } }),
+    )!;
+    expect(legacy).not.toBeNull();
+    expect(legacy.settings.testMode).toBeUndefined();
+  });
 });

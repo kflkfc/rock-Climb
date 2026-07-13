@@ -22,6 +22,7 @@ export class CharacterScene implements Scene {
     this.back = drawTopBar(ctx, w, "选择角色", true);
 
     const stars = totalStars(this.save.data);
+    const testMode = !!this.save.data.settings.testMode;
     const current = this.runner.game.characterId;
     const cw = Math.min(420, w - 32);
     const ch = 128;
@@ -29,7 +30,8 @@ export class CharacterScene implements Scene {
     let y = 80;
     this.cards = [];
     for (const c of CHARACTERS) {
-      const unlocked = characterUnlocked(c, stars);
+      const starUnlocked = characterUnlocked(c, stars);
+      const unlocked = starUnlocked || testMode; // 测试模式：全角色可选
       const r = { x, y, w: cw, h: ch };
       drawWoodCard(ctx, r, current === c.id ? "#B8965F" : undefined);
       ctx.textAlign = "left";
@@ -52,6 +54,10 @@ export class CharacterScene implements Scene {
       if (!unlocked) {
         ctx.fillStyle = THEME.accent;
         ctx.fillText(`🔒 需 ${c.unlock!.stars}⭐（当前 ${stars}⭐）`, r.x + 20, r.y + 108);
+      } else if (!starUnlocked) {
+        // 测试模式解锁：提示这是本该锁着的角色
+        ctx.fillStyle = THEME.green;
+        ctx.fillText(`🧪 测试模式解锁（正式需 ${c.unlock!.stars}⭐）`, r.x + 20, r.y + 108);
       } else if (c.abilityBias) {
         ctx.fillStyle = THEME.green;
         ctx.fillText("✦ 种族天赋已激活", r.x + 20, r.y + 108);

@@ -25,7 +25,9 @@ export interface SaveV2 {
   createdAt: string; // ISO 时间，仅作展示；逻辑不读墙钟
   climberLevel: number; // 选手级别 1-10
   characterId: string; // 当前角色
-  settings: { muted: boolean };
+  /** testMode：可选字段（老档缺省 false）。仅影响 UI 解锁门槛（全角色可选），
+   *  不进物理/回放——角色一旦选定仍走正常 chara 事件、作为 tape 起始条件被诚实记录 */
+  settings: { muted: boolean; testMode?: boolean };
   /** 按关卡 id 记录进度 */
   progress: Record<string, LevelProgress>;
   /** 抓法熟练度 0-100（使用即涨）。可选字段：老档缺省视为全 0。
@@ -183,6 +185,12 @@ export class SaveManager {
 
   setMuted(m: boolean): void {
     this.data.settings.muted = m;
+    this.persist();
+  }
+
+  /** 测试模式：仅解除 UI 解锁门槛（全角色可选）。不改物理/回放 */
+  setTestMode(t: boolean): void {
+    this.data.settings.testMode = t;
     this.persist();
   }
 
