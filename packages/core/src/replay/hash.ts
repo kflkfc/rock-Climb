@@ -59,6 +59,8 @@ export function stateHash(game: Game): string {
       f64bits(st.stamina),
       f64bits(st.match),
       f64bits(st.contactDist),
+      f64bits(st.contactOff.x), // 接触偏移影响 gripPos → 全部物理，必须入指纹
+      f64bits(st.contactOff.y),
       f64bits(st.freePos.x),
       f64bits(st.freePos.y),
       st.slipping ? "1" : "0",

@@ -29,6 +29,17 @@ export const clampLen = (a: Vec2, max: number): Vec2 => {
   return l <= max ? a : scale(a, max / l);
 };
 
+/** 点 p 到线段 ab 的最短距离（拖小臂/小腿命中测试用） */
+export function distToSegment(p: Vec2, a: Vec2, b: Vec2): number {
+  const abx = b.x - a.x;
+  const aby = b.y - a.y;
+  const l2 = abx * abx + aby * aby;
+  if (l2 < 1e-9) return dist(p, a);
+  let t = ((p.x - a.x) * abx + (p.y - a.y) * aby) / l2;
+  t = t < 0 ? 0 : t > 1 ? 1 : t;
+  return dhypot(p.x - (a.x + abx * t), p.y - (a.y + aby * t));
+}
+
 export const rotate = (a: Vec2, rad: number): Vec2 => {
   const c = dcos(rad);
   const s = dsin(rad);

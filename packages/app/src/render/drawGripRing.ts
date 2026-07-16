@@ -12,19 +12,30 @@ export interface RingSlot {
   r: number; // 屏幕半径
 }
 
+/**
+ * V1.1 布局：最多 3 个选项（匹配度前 3）在岩点上方一字排开；
+ * 靠屏幕边缘时整行水平平移 / 翻到岩点下方，保证不出屏。
+ * 注意：命中派发用 options.indexOf(slot.opt)（引用同一对象）——
+ * 序号仍指向完整 options 列表，回放事件语义不变。
+ */
 export function ringLayout(cam: Camera, ring: RingState): RingSlot[] {
   const center = cam.toScreen(ring.hold.pos);
-  const n = ring.options.length;
-  const ringR = Math.max(78, 30 * cam.scale + 54);
+  const opts = ring.options.slice(0, 3); // 只给前 3（已按匹配度降序）
   const slotR = 30;
-  return ring.options.map((opt, i) => {
-    const a = -Math.PI / 2 + (i / n) * Math.PI * 2;
-    return {
-      opt,
-      c: { x: center.x + Math.cos(a) * ringR, y: center.y + Math.sin(a) * ringR },
-      r: slotR,
-    };
-  });
+  const gapX = slotR * 2 + 14; // 相邻槽间距
+  const margin = slotR + 8;
+  const liftY = Math.max(78, 30 * cam.scale + 54);
+
+  // 行内 x：以岩点为中心展开，再整体钳入屏幕
+  const width = (opts.length - 1) * gapX;
+  let x0 = center.x - width / 2;
+  x0 = Math.max(margin, Math.min(cam.canvasW - margin - width, x0));
+  // 行 y：默认岩点上方；出屏则翻到下方；再钳制兜底
+  let y = center.y - liftY;
+  if (y < margin) y = center.y + liftY;
+  y = Math.max(margin, Math.min(cam.canvasH - margin, y));
+
+  return opts.map((opt, i) => ({ opt, c: { x: x0 + i * gapX, y }, r: slotR }));
 }
 
 function matchColor(m: number): string {

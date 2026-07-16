@@ -22,3 +22,6 @@ Thumbs.db
 
 # 设计文档仅保存本地，不上传 GitHub
 RockClimbing Game/
+
+# 排行榜服务本地运行数据（JSON 存储 + 回放归档）
+/data/

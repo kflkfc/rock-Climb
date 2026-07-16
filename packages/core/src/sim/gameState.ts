@@ -12,6 +12,7 @@ import {
   len,
   dist,
   clampLen,
+  distToSegment,
 } from "../math/vec2.ts";
 import { makeBody, abilitiesForLevel, BodyParams } from "../model/body.ts";
 import { characterById, applyBias, DEFAULT_CHARACTER_ID } from "../model/characters.ts";
@@ -31,10 +32,12 @@ import {
   LimbState,
   stepClimber,
   limbTarget,
+  gripPos,
   attachedLimbs,
   reachSlackOf,
   SlipReason,
 } from "./physics.ts";
+import { limbRadiusOf, discOverlapRatio } from "./contact.ts";
 import { LevelDef, wallAngleAtY } from "../level/levelSchema.ts";
 import { LEVELS } from "../level/levels.ts";
 import { StarResult, judgeStars, starCount } from "../progress/stars.ts";
@@ -48,6 +51,8 @@ export interface RingState {
   limb: Limb;
   hold: Hold;
   contactDist: number;
+  /** 接触点相对岩点中心的偏移（不吸附：选定抓法后肢端留在原处） */
+  contactOff: Vec2;
   pullRad: number;
   options: GripOption[];
 }
@@ -79,6 +84,8 @@ export class Game {
   private fallTimer = 0;
   /** 最近一次脱手归因（HUD 教学提示，2.2s 淡出） */
   lastSlip: { limb: Limb; reason: SlipReason; t: number } | null = null;
+  /** 最近一次因肢端重叠被拒的抓取（HUD 提示"错开一点再抓"） */
+  lastBlocked: { limb: Limb; t: number } | null = null;
   // ---- run 统计（三星评定口径）：一次"尝试"= 手动重置/换关 → 完攀，跨自动坠落复位累计 ----
   /** run 计时（秒）：从本 run 首次有效输入起算，坠落复位不清零（防刷神速星） */
   runTime = 0;
@@ -96,9 +103,10 @@ export class Game {
     prevGrip: GripMethod | null;
     prevMatch: number;
     prevContactDist: number;
+    prevContactOff: Vec2;
   }[] = [];
   /** beginDrag 时缓存该肢离开的岩点（commitGrip 压栈用） */
-  private dragFrom: { limb: Limb; holdId: string | null; grip: GripMethod | null; match: number; contactDist: number } | null = null;
+  private dragFrom: { limb: Limb; holdId: string | null; grip: GripMethod | null; match: number; contactDist: number; contactOff: Vec2 } | null = null;
   // ---- 抓法熟练度（tape 起点冻结）与指伤 ----
   /** 熟练度快照：仅 setProficiency 更新（run 中途不变 → 回放确定）；影响 liveMatch */
   proficiency: Record<string, number> = {};
@@ -221,7 +229,8 @@ export class Game {
         hold: h,
         grip: isHand(l) ? "open" : "inside",
         match: 0.9,
-        contactDist: 2,
+        contactDist: 0,
+        contactOff: v(0, 0),
         stamina: 1,
         align: 1,
         freePos: { ...h.pos },
@@ -275,6 +284,7 @@ export class Game {
     this.rippleAt = null;
     this.fallTimer = 0;
     this.lastSlip = null;
+    this.lastBlocked = null;
     this.dragVel = v();
     this.prevDragPos = v();
     this.replay = [];
@@ -283,14 +293,16 @@ export class Game {
 
   // ---- V4 交互 ----
 
-  /** 在 worldPos 处尝试抓起一个自由肢端把手；返回是否抓到 */
+  /** 在 worldPos 处尝试抓起一个肢端把手（含小臂/小腿段）；返回是否抓到 */
   beginDrag(worldPos: Vec2): boolean {
     if (this.status !== "climbing") return false;
     let best: Limb | null = null;
     let bestD = PICK_R;
     for (const l of LIMBS) {
-      const p = limbTarget(this.c, l);
-      const d = dist(p, worldPos);
+      // 命中测试用"肘→手 / 膝→脚"线段距离：拖小臂/小腿同样能移动手脚。
+      // 末端点在线段上 → 点末端仍优先命中（段距 ≤ 端距恒成立）。
+      const seg = this.c.pose.limb[l].ik;
+      const d = Math.min(distToSegment(worldPos, seg.joint, seg.end), dist(limbTarget(this.c, l), worldPos));
       if (d < bestD) {
         bestD = d;
         best = l;
@@ -308,6 +320,7 @@ export class Game {
       grip: st.grip,
       match: st.match,
       contactDist: st.contactDist,
+      contactOff: { ...st.contactOff },
     };
     // 抓住的肢端被拖动 = 先脱离当前岩点
     st.attached = false;
@@ -361,8 +374,14 @@ export class Game {
       // 未落在岩点：保持当前位置，由 solveFreeLimbs 柔和过渡到自然姿态（不突然下垂）
       return;
     }
-    const contact = clampLen(sub(this.dragPos, hold.pos), hold.radius);
-    const contactDist = len(contact);
+    // 不吸附（V1.1）：抓在哪就在哪——接触偏移 = 松手位置相对岩点中心
+    const contactOff = sub(this.dragPos, hold.pos);
+    const contactDist = len(contactOff);
+    // 肢端占位（V1.1）：与任何已抓肢端重叠 > 上限 → 后来者抓不住，保持自由
+    if (this.overlapBlocked(l, this.dragPos)) {
+      this.lastBlocked = { limb: l, t: this.time };
+      return;
+    }
     const root = this.c.pose.limb[l].root;
     const pullRad = datan2(root.y - hold.pos.y, root.x - hold.pos.x);
     // 接触波纹特效
@@ -373,7 +392,7 @@ export class Game {
     if (hold.type === "jug") {
       // Jug：跳过抓法环，默认最优抓法直接抓住
       const best = gripOptions(l, hold, contactDist, pullRad, this.climberLevel)[0];
-      this.commitGrip(l, hold, best, contactDist);
+      this.commitGrip(l, hold, best, contactOff);
       return;
     }
     // 其它岩点：弹抓法环（技术树：只显示当前等级已解锁的抓法）
@@ -381,6 +400,7 @@ export class Game {
       limb: l,
       hold,
       contactDist,
+      contactOff,
       pullRad,
       options: gripOptions(l, hold, contactDist, pullRad, this.climberLevel),
     };
@@ -390,12 +410,12 @@ export class Game {
   /** 抓法环中选定某抓法 */
   chooseGrip(grip: GripOption) {
     if (!this.ring) return;
-    const { limb, hold, contactDist } = this.ring;
+    const { limb, hold, contactOff } = this.ring;
     // 先退出环再 commit：commitGrip 抓到终点会置 won，不能被 climbing 覆盖
     // （曾有 bug：非 Jug 终点经抓法环完攀被吞——终点是 Jug 时走直抓路径掩盖了它）
     this.ring = null;
     this.status = "climbing";
-    this.commitGrip(limb, hold, grip, contactDist);
+    this.commitGrip(limb, hold, grip, contactOff);
   }
 
   /** 按抓法环选项序号选定（回放事件的稳定引用；options 顺序确定）。序号越界=取消 */
@@ -427,7 +447,7 @@ export class Game {
       const st = this.c.limbs[m];
       if (st.attached && st.hold) {
         if (!excluded.includes(st.hold.id)) excluded.push(st.hold.id);
-        st.freePos = { ...st.hold.pos };
+        st.freePos = { ...gripPos(st) };
         st.attached = false;
         st.hold = null;
         st.grip = null;
@@ -466,19 +486,23 @@ export class Game {
       const hold = best;
       // 落手点：从岩点中心向手根方向偏移（拍在近侧边缘，contactDist 反映仓促）
       const contactDist = Math.min(hold.radius * 0.6, bestD * 0.1);
-      this.c.limbs[l].freePos = { ...hold.pos };
+      const contactOff = scale(norm(sub(root, hold.pos)), contactDist);
+      const cpos = add(hold.pos, contactOff);
+      // 占位：落点与已抓肢端重叠过多 → 这只手拍不住，换另一只手试
+      if (this.overlapBlocked(l, cpos)) continue;
+      this.c.limbs[l].freePos = { ...cpos };
       const pullRad = datan2(root.y - hold.pos.y, root.x - hold.pos.x);
       const match = matchPercent({ hold, grip: "slap", distToCenter: contactDist, pullRad });
       this.c.dyno = null;
       this.rippleAt = { ...hold.pos };
       this.rippleT = 0;
       this.onContact?.();
-      this.commitGrip(l, hold, { grip: "slap", match, injury: false }, contactDist);
+      this.commitGrip(l, hold, { grip: "slap", match, injury: false }, contactOff);
       return;
     }
   }
 
-  private commitGrip(l: Limb, hold: Hold, opt: GripOption, contactDist: number) {
+  private commitGrip(l: Limb, hold: Hold, opt: GripOption, contactOff: Vec2) {
     const st = this.c.limbs[l];
     // undo 栈：记录该肢的"来处"（甩跳拍击落点不入栈——跳跃不可回退）
     if (opt.grip !== "slap" && this.dragFrom && this.dragFrom.limb === l) {
@@ -488,6 +512,7 @@ export class Game {
         prevGrip: this.dragFrom.grip,
         prevMatch: this.dragFrom.match,
         prevContactDist: this.dragFrom.contactDist,
+        prevContactOff: { ...this.dragFrom.contactOff },
       });
     } else if (opt.grip === "slap") {
       this.undoStack.length = 0;
@@ -497,7 +522,8 @@ export class Game {
     st.hold = hold;
     st.grip = opt.grip;
     st.match = opt.match;
-    st.contactDist = contactDist;
+    st.contactDist = len(contactOff);
+    st.contactOff = { ...contactOff };
     this.gripCount++;
     this.movesBy[l]++;
     // 全扣劳损（GDD 反向激励）：低熟练连用 3 次 → 指伤 90s（确定性规则，非概率）
@@ -528,9 +554,10 @@ export class Game {
       st.grip = u.prevGrip;
       st.match = u.prevMatch;
       st.contactDist = u.prevContactDist;
-      st.freePos = { ...prev.pos };
+      st.contactOff = { ...u.prevContactOff };
+      st.freePos = add(prev.pos, u.prevContactOff);
     } else {
-      st.freePos = st.hold ? { ...st.hold.pos } : { ...st.freePos };
+      st.freePos = st.hold ? { ...gripPos(st) } : { ...st.freePos };
       st.attached = false;
       st.hold = null;
       st.grip = null;
@@ -552,6 +579,19 @@ export class Game {
   setProficiency(p: Record<string, number>) {
     this.proficiency = { ...p };
     if (this.c) this.c.proficiency = this.proficiency;
+  }
+
+  /** 肢端占位判定（V1.1）：pos 处放置肢端 l，与任何已抓肢端重叠比例是否超上限 */
+  private overlapBlocked(l: Limb, pos: Vec2): boolean {
+    const rl = limbRadiusOf(l, tuning);
+    for (const m of LIMBS) {
+      if (m === l) continue;
+      const ms = this.c.limbs[m];
+      if (!ms.attached || !ms.hold) continue;
+      const ratio = discOverlapRatio(dist(pos, gripPos(ms)), rl, limbRadiusOf(m, tuning));
+      if (ratio > tuning.overlapMax) return true;
+    }
+    return false;
   }
 
   private holdAt(p: Vec2, l: Limb): Hold | null {

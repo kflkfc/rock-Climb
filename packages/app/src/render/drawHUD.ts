@@ -70,6 +70,20 @@ export function drawHUD(ctx: CanvasRenderingContext2D, cam: Camera, game: Game):
     );
   }
 
+  // 重叠拒抓提示（V1.1 占位规则：与已抓肢端重叠 >30% 抓不住）
+  if (game.lastBlocked && game.time - game.lastBlocked.t < 2.2) {
+    const age = game.time - game.lastBlocked.t;
+    const alpha = age < 1.6 ? 1 : 1 - (age - 1.6) / 0.6;
+    ctx.textAlign = "center";
+    ctx.fillStyle = `rgba(229,166,54,${alpha})`;
+    ctx.font = "700 16px system-ui, sans-serif";
+    ctx.fillText(
+      `✋ ${LIMB_LABEL[game.lastBlocked.limb]}放不下：位置被占，错开一点再抓`,
+      W / 2,
+      44,
+    );
+  }
+
   // 左下：重置 + 退出 + 回退 圆形图标（undo 罚流畅星；栈空时半透明）
   const ry = H - 40;
   const reset = { x: 36, y: ry, r: 22 };

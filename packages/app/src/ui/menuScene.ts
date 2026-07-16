@@ -4,6 +4,7 @@ import { Scene, PointerEvt, Rect, inRect, drawButton, THEME } from "./scene.ts";
 import { SaveManager } from "@kkc/core/progress/save.ts";
 import { totalStars, climberLevelForStars, starsToNextLevel } from "@kkc/core/progress/growth.ts";
 import { LEVEL_LABEL } from "@kkc/core/model/body.ts";
+import { CORE_VERSION } from "@kkc/core/version.ts";
 
 export class MenuScene implements Scene {
   private buttons: { r: Rect; label: string; go?: () => void }[] = [];
@@ -70,7 +71,7 @@ export class MenuScene implements Scene {
 
     ctx.fillStyle = "rgba(79,63,48,0.45)";
     ctx.font = "12px system-ui, sans-serif";
-    ctx.fillText("V1.0 开发中 · core 0.5.0", w / 2, h - 18);
+    ctx.fillText(`V1.0 开发中 · core ${CORE_VERSION}`, w / 2, h - 18);
   }
 
   onDown(e: PointerEvt) {

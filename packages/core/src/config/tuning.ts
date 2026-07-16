@@ -32,6 +32,11 @@ export interface Tuning {
   dynoWindow: number; // 腾空抓取窗口（秒），超时坠落
   dynoGravity: number; // 腾空弹道重力（px/s²，世界竖直向下）
   tensionBoost: number; // 全身张力对抗在陡仰上的抓力增益上限系数
+  // 肢端占位与接触覆盖（V1.1 交互改版：松手不吸附 + 手脚占空间）
+  limbHandR: number; // 手占位半径（世界单位）
+  limbFootR: number; // 脚占位半径（世界单位）
+  overlapMax: number; // 肢端互相重叠比例上限（超过 → 后来者抓不住）
+  contactDrainK: number; // 覆盖率不足的耐力急耗强度（0=关闭）
 }
 
 export const tuning: Tuning = {
@@ -64,6 +69,10 @@ export const tuning: Tuning = {
   dynoWindow: 1.15,
   dynoGravity: 1400,
   tensionBoost: 0.5,
+  limbHandR: 9,
+  limbFootR: 7,
+  overlapMax: 0.3,
+  contactDrainK: 2.5,
 };
 
 export interface TuneSpec {
@@ -102,4 +111,8 @@ export const TUNE_SPECS: TuneSpec[] = [
   { key: "dynoWindow", label: "腾空窗口", min: 0.5, max: 2, step: 0.05 },
   { key: "dynoGravity", label: "腾空重力", min: 600, max: 2600, step: 50 },
   { key: "tensionBoost", label: "张力增益", min: 0, max: 1.2, step: 0.05 },
+  { key: "limbHandR", label: "手占位半径", min: 4, max: 18, step: 1 },
+  { key: "limbFootR", label: "脚占位半径", min: 3, max: 14, step: 1 },
+  { key: "overlapMax", label: "重叠上限", min: 0, max: 1, step: 0.05 },
+  { key: "contactDrainK", label: "浅抓急耗", min: 0, max: 8, step: 0.25 },
 ];

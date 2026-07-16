@@ -14,6 +14,7 @@ import { LevelDef, wallAngleAtY } from "../level/levelSchema.ts";
 import { Hold, makeHold, holdUsableBy } from "../sim/holds.ts";
 import { gripOptions } from "../sim/grip.ts";
 import { gravitySigned, reachSlackOf } from "../sim/physics.ts";
+import { limbRadiusOf, discOverlapRatio } from "../sim/contact.ts";
 import { Limb, LIMBS, isHand, resolvePose, desiredBend, maxReachOf } from "../model/skeleton.ts";
 import { BodyParams, makeBody, abilitiesForLevel, armReach, legReach } from "../model/body.ts";
 import { characterById, applyBias } from "../model/characters.ts";
@@ -103,6 +104,19 @@ function feasible(
   for (const l of LIMBS) {
     const d = dist(pose.limb[l].root, holdOf.get(a[l])!.pos);
     if (d > maxReachOf(body, l) * slack * 1.12) return false;
+  }
+
+  // 1.5 肢端占位（V1.1）：两肢即使各自在岩点内最优错开，重叠仍超上限 → 不可行。
+  // 最大错开距离 = 岩点中心距 + 双方岩点半径（接触点可放到各自岩点边缘）。
+  for (let i = 0; i < LIMBS.length; i++) {
+    for (let j = i + 1; j < LIMBS.length; j++) {
+      const ha = holdOf.get(a[LIMBS[i]])!;
+      const hb = holdOf.get(a[LIMBS[j]])!;
+      const maxSep = dist(ha.pos, hb.pos) + ha.radius + hb.radius;
+      const ra = limbRadiusOf(LIMBS[i], tuning);
+      const rb = limbRadiusOf(LIMBS[j], tuning);
+      if (discOverlapRatio(maxSep, ra, rb) > tuning.overlapMax) return false;
+    }
   }
 
   // 2 平衡：com.x 在支撑 x 跨度 ± 核心容差内（comBalanced 静态版）
