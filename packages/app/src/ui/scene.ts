@@ -22,6 +22,9 @@ export interface Scene {
 export class SceneStack {
   private stack: Scene[] = [];
   private fade = 0; // 1 → 0 淡入
+  /** 收到本次 onDown 的场景：onMove/onUp 只回给它——
+   *  onDown 里切场景（push/pop）时，防止同一次点击的 onUp 漏给新露出的场景误触。 */
+  private downScene: Scene | null = null;
 
   get top(): Scene | null {
     return this.stack[this.stack.length - 1] ?? null;
@@ -59,12 +62,17 @@ export class SceneStack {
 
   onDown(e: PointerEvt) {
     if (this.fade > 0.5) return; // 转场中不接输入
+    this.downScene = this.top;
     this.top?.onDown?.(e);
   }
   onMove(e: PointerEvt) {
+    if (this.downScene !== this.top) return;
     this.top?.onMove?.(e);
   }
   onUp(e: PointerEvt) {
+    const target = this.downScene;
+    this.downScene = null;
+    if (target !== this.top) return;
     this.top?.onUp?.(e);
   }
 }

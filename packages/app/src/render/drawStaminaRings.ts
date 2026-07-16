@@ -1,13 +1,16 @@
-// 每肢端把手附近的彩色耐力环：绿→黄→红，随耐力实时变化（V4 视觉核心）。
-// V1.1：环不再压在手脚上——按肢端向四角错开（左手←↖ 右手→↗ 左脚←↙ 右脚→↘），
+// 每肢端把手附近的耐力扇形指示（V1.2 视觉规则）：
+//   耐力 > 2/3 完全不显示（不打扰）；2/3~1/2 绿 / 1/2~1/3 黄 / <1/3 红。
+//   无底环——只画剩余耐力对应的实心扇形（永远不是完整圆环）。
+// V1.1：不压在手脚上——按肢端向四角错开（左手←↖ 右手→↗ 左脚←↙ 右脚→↘），
 // 并钳制在屏幕内（靠边时临时向内挪）。
 
 import { Camera } from "./camera.ts";
 import { Game } from "@kkc/core/sim/gameState.ts";
 import { Limb, LIMBS, Pose } from "@kkc/core/model/skeleton.ts";
-import { staminaColor } from "@kkc/core/sim/stamina.ts";
 
-const COLOR = { green: "#5F9A6A", yellow: "#E5A636", red: "#D64A47" };
+const SHOW_BELOW = 2 / 3; // 高于此值不显示
+const GREEN_ABOVE = 1 / 2; // (1/2, 2/3] 绿
+const YELLOW_ABOVE = 1 / 3; // (1/3, 1/2] 黄；≤1/3 红
 
 /** 各肢端的错开方向（屏幕坐标，y 向下）：手在上方两角、脚在下方两角 */
 const OFFSET_DIR: Record<Limb, { x: number; y: number }> = {
@@ -17,6 +20,12 @@ const OFFSET_DIR: Record<Limb, { x: number; y: number }> = {
   RF: { x: 1, y: 1 },
 };
 
+function sectorColor(s: number): string {
+  if (s > GREEN_ABOVE) return "#5F9A6A";
+  if (s > YELLOW_ABOVE) return "#E5A636";
+  return "#D64A47";
+}
+
 export function drawStaminaRings(
   ctx: CanvasRenderingContext2D,
   cam: Camera,
@@ -24,31 +33,25 @@ export function drawStaminaRings(
   pose: Pose,
 ) {
   for (const l of LIMBS) {
-    const st = game.c.limbs[l];
+    const s = game.c.limbs[l].stamina;
+    if (s > SHOW_BELOW) continue; // 体力充沛：不显示
     const end = cam.toScreen(pose.limb[l].ik.end); // 跟随平滑后的把手
-    const r = 15 * cam.scale;
-    const lw = 4 * cam.scale;
-    const off = 24 * cam.scale; // 错开量：环缘离开手脚
+    const r = 16 * cam.scale;
+    const off = 24 * cam.scale; // 错开量：扇形离开手脚
     const dir = OFFSET_DIR[l];
     let px = end.x + dir.x * off;
     let py = end.y + dir.y * off;
-    // 屏幕钳制（靠边时临时向内挪，整环始终可见）
-    const m = r + lw;
-    px = Math.max(m, Math.min(cam.canvasW - m, px));
-    py = Math.max(m, Math.min(cam.canvasH - m, py));
-    const s = st.stamina;
-    // 底环
+    // 屏幕钳制（靠边时临时向内挪，整个扇形始终可见）
+    px = Math.max(r, Math.min(cam.canvasW - r, px));
+    py = Math.max(r, Math.min(cam.canvasH - r, py));
+    // 实心扇形：从顶部顺时针，圆心角 = 剩余耐力占比（≤2/3 圈，永不成整环）
     ctx.beginPath();
-    ctx.arc(px, py, r, 0, Math.PI * 2);
-    ctx.strokeStyle = "rgba(40,30,20,0.18)";
-    ctx.lineWidth = lw;
-    ctx.stroke();
-    // 耐力弧（从顶部顺时针，长度 = 剩余耐力）
-    ctx.beginPath();
+    ctx.moveTo(px, py);
     ctx.arc(px, py, r, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * s);
-    ctx.strokeStyle = COLOR[staminaColor(s)];
-    ctx.lineWidth = lw;
-    ctx.lineCap = "round";
-    ctx.stroke();
+    ctx.closePath();
+    ctx.fillStyle = sectorColor(s);
+    ctx.globalAlpha = 0.9;
+    ctx.fill();
+    ctx.globalAlpha = 1;
   }
 }

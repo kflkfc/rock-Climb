@@ -13,6 +13,7 @@ import { MenuScene } from "@kkc/app/ui/menuScene.ts";
 import { GymScene } from "@kkc/app/ui/gymScene.ts";
 import { LevelSelectScene } from "@kkc/app/ui/levelSelectScene.ts";
 import { GameScene } from "@kkc/app/ui/gameScene.ts";
+import { ReplayScene } from "@kkc/app/ui/replayScene.ts";
 import { CharacterScene } from "@kkc/app/ui/characterScene.ts";
 import { DailyScene } from "@kkc/app/ui/dailyScene.ts";
 import { LeaderboardScene, BoardData } from "@kkc/app/ui/leaderboardScene.ts";
@@ -68,8 +69,15 @@ const nav = {
     stack.push(new LevelSelectScene(gym, save, { back, play: nav.play })),
   play: (levelIndex: number) =>
     stack.push(
-      new GameScene(runner, cam, save, { exit: back, leaderboard: nav.board }, { levelIndex }),
+      new GameScene(
+        runner,
+        cam,
+        save,
+        { exit: back, leaderboard: nav.board, replay: nav.replayView },
+        { levelIndex },
+      ),
     ),
+  replayView: (rep: Replay) => stack.push(new ReplayScene(rep, { back })),
   daily: () =>
     stack.push(
       new DailyScene(save, {
@@ -80,7 +88,7 @@ const nav = {
               runner,
               cam,
               save,
-              { exit: back, leaderboard: nav.board },
+              { exit: back, leaderboard: nav.board, replay: nav.replayView },
               { dailyDate: date },
             ),
           ),

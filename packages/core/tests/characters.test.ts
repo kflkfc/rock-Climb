@@ -7,8 +7,8 @@ import { LIMBS } from "../src/model/skeleton.ts";
 import { botPlay } from "./helpers/bot.ts";
 
 describe("角色阵容 · 数据", () => {
-  it("5 名首发角色，体格值域合法，含 ≥2 名星数解锁角色", () => {
-    expect(CHARACTERS.length).toBe(5);
+  it("6 名首发角色，体格值域合法，含 ≥3 名星数解锁角色", () => {
+    expect(CHARACTERS.length).toBe(6);
     let locked = 0;
     for (const c of CHARACTERS) {
       expect(c.physique.height).toBeGreaterThan(0.4);
@@ -18,7 +18,7 @@ describe("角色阵容 · 数据", () => {
       expect(c.physique.flexibility).toBeLessThanOrEqual(1);
       if (c.unlock) locked++;
     }
-    expect(locked).toBeGreaterThanOrEqual(2); // 猴子/金刚
+    expect(locked).toBeGreaterThanOrEqual(3); // 猴子/西装暴徒/金刚
     expect(characterById("gorilla").name).toBe("金刚"); // 招牌角色
     expect(characterById("不存在").id).toBe("climber"); // 未知 id 回退默认
   });
@@ -46,7 +46,7 @@ describe("角色阵容 · 数据", () => {
 });
 
 describe("角色阵容 · 极端体型全关卡回归（不穿模不 NaN 不崩溃）", () => {
-  for (const cid of ["kid", "monkey", "gorilla"] as const) {
+  for (const cid of ["kid", "monkey", "gorilla", "suit"] as const) {
     it(`${cid} 在全部 ${LEVELS.length} 关可加载并稳定模拟`, () => {
       for (let i = 0; i < LEVELS.length; i++) {
         const r = new GameRunner(i);

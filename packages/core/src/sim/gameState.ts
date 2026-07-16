@@ -707,6 +707,11 @@ export class Game {
     return this.status === "won" && this.lastStars ? starCount(this.lastStars) : 0;
   }
 
+  /** 渲染用：won 慢放已放完、定格在最后一帧（角色回眸一笑的时机） */
+  get wonFreeze(): boolean {
+    return this.status === "won" && this.replayIdx >= this.replay.length - 1;
+  }
+
   /** 渲染用：won 时返回回放帧姿态，否则当前姿态 */
   renderPose(): { pose: Pose; attached: Record<Limb, boolean> } {
     if (this.status === "won" && this.replay.length > 0) {
