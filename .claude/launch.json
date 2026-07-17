@@ -2,9 +2,9 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "boulder-sim",
+      "name": "kkc-web",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["--prefix", "BoulderSim", "run", "dev"],
+      "runtimeArgs": ["run", "dev"],
       "port": 5173
     }
   ]

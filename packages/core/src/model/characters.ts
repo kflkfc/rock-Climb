@@ -8,7 +8,7 @@ export interface CharacterDef {
   id: string;
   name: string;
   /** 皮肤 id（渲染层按此绘制外观/装饰；装饰不进物理） */
-  skin: "climber" | "kid" | "lady" | "monkey" | "gorilla";
+  skin: "climber" | "kid" | "lady" | "monkey" | "gorilla" | "suit";
   tagline: string; // 选择页一句话定位
   physique: Physique;
   /**
@@ -53,6 +53,15 @@ export const CHARACTERS: CharacterDef[] = [
     physique: { height: 0.6, apeIndex: 1.35, legRatio: 0.9, handScale: 0.9, weight: 40, flexibility: 0.95 },
     abilityBias: { power: 1.15, endurance: 1.1 },
     unlock: { stars: 30 },
+  },
+  {
+    id: "suit",
+    name: "西装暴徒",
+    skin: "suit",
+    tagline: "硬汉流：西装革履，重拳般的把手控制",
+    physique: { height: 1.02, apeIndex: 1.05, legRatio: 1.0, handScale: 1.15, weight: 105, flexibility: 0.45 },
+    abilityBias: { power: 1.2, endurance: 1.05 },
+    unlock: { stars: 45 },
   },
   {
     id: "gorilla",

@@ -161,6 +161,52 @@ export interface ReplayResult {
   claimOk: boolean;
 }
 
+/**
+ * 增量重演器（可视回放用）：与 replayRun 完全同一 apply 路径，但把"逐帧步进"交给
+ * 调用方节奏控制（渲染循环按 LOGIC_DT 驱动）。构造时套用回放的调参快照，
+ * **用完必须 dispose() 恢复全局调参**（场景 exit 钩子里调）。
+ */
+export class ReplayPlayer {
+  readonly game: Game;
+  frame = 0;
+  private ei = 0;
+  private savedTuning: Tuning;
+
+  constructor(readonly replay: Replay) {
+    this.savedTuning = { ...tuning };
+    Object.assign(tuning, replay.tuning);
+    this.game = new Game(LEVELS[replay.levelIndex]);
+    this.game.setClimberLevel(replay.climberLevel);
+    if (replay.characterId) this.game.setCharacter(replay.characterId);
+    this.game.setProficiency(replay.proficiency ?? {});
+    if (replay.dailyDate) this.game.loadCustom(generateDaily(replay.dailyDate).level);
+  }
+
+  /** 播完 = tape 帧耗尽，或已到达 claim 的完攀状态（结算后录的空帧不用播） */
+  get done(): boolean {
+    return (
+      this.frame >= this.replay.frames ||
+      (this.replay.claim.status === "won" && this.game.status === "won")
+    );
+  }
+
+  step(): void {
+    if (this.done) return;
+    const evs = this.replay.events;
+    while (this.ei < evs.length && evs[this.ei].f === this.frame) {
+      applyEvent(this.game, evs[this.ei]);
+      this.ei++;
+    }
+    this.game.update(LOGIC_DT);
+    this.frame++;
+  }
+
+  /** 恢复全局调参（必须在丢弃本对象前调用一次） */
+  dispose(): void {
+    Object.assign(tuning, this.savedTuning);
+  }
+}
+
 /** 重演回放：临时套用其调参快照，逐帧生效事件并步进，返回终态哈希 */
 export function replayRun(replay: Replay): ReplayResult {
   const saved = { ...tuning };

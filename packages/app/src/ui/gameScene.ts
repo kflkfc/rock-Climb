@@ -2,8 +2,9 @@
 // （原 platform-web/main.ts 的游戏循环与 pointer.ts 的交互逻辑收编于此——
 //   场景化后微信端可整体复用，壳层只做事件转发。）
 
-import { Scene, PointerEvt, Rect, inRect, drawButton, THEME } from "./scene.ts";
+import { Scene, PointerEvt, Rect, inRect, drawButton, roundRect, THEME } from "./scene.ts";
 import { GameRunner, LOGIC_DT } from "@kkc/core/replay/runner.ts";
+import { Replay } from "@kkc/core/replay/format.ts";
 import { LEVELS } from "@kkc/core/level/levels.ts";
 import { wallAngleAtY } from "@kkc/core/level/levelSchema.ts";
 import { SaveManager } from "@kkc/core/progress/save.ts";
@@ -26,15 +27,28 @@ export class GameScene implements Scene {
   private acc = 0;
   private lastLevelId: string;
   private pointerActive = false;
-  private settleButtons: { again: Rect; next: Rect; back: Rect; board: Rect } | null = null;
+  private settleButtons: {
+    again: Rect;
+    next: Rect;
+    back: Rect;
+    board: Rect;
+    replay: Rect;
+  } | null = null;
   private hintFade = 0; // 教学气泡透明度
   private t = 0; // 动效计时
+  private confirmingExit = false; // 退出确认弹窗（打开时逻辑暂停、屏蔽其他交互）
+  private confirmBtns: { yes: Rect; no: Rect } | null = null;
+  private resumeOnEnter = false; // 从回放场景返回：不重开本关（保留结算态）
 
   constructor(
     private runner: GameRunner,
     private cam: Camera,
     _save: SaveManager, // 存档由壳层经 game 回调写入；保留参数位供后续（结算最佳对比）
-    private nav: { exit: () => void; leaderboard?: (levelId: string, levelName: string) => void },
+    private nav: {
+      exit: () => void;
+      leaderboard?: (levelId: string, levelName: string) => void;
+      replay?: (rep: Replay) => void;
+    },
     private entry?: { levelIndex?: number; dailyDate?: string },
   ) {
     this.lastLevelId = this.runner.game.level.id;
@@ -42,6 +56,12 @@ export class GameScene implements Scene {
 
   /** 进关：切目标关 → 立即生效 → 重开 tape——回放 = 干净的单关尝试（提交排行榜用） */
   enter() {
+    this.confirmingExit = false;
+    if (this.resumeOnEnter) {
+      // 从回放场景返回：保留现场（结算态/进行中），不重开
+      this.resumeOnEnter = false;
+      return;
+    }
     if (this.entry?.dailyDate) this.runner.dispatch({ e: "daily", date: this.entry.dailyDate });
     else if (this.entry?.levelIndex != null)
       this.runner.dispatch({ e: "level", i: this.entry.levelIndex });
@@ -56,15 +76,19 @@ export class GameScene implements Scene {
   }
 
   draw(ctx: CanvasRenderingContext2D, w: number, h: number, dt: number) {
-    // 固定步长逻辑（确定性内核约束：逻辑只吃 LOGIC_DT）
-    this.acc += Math.min(0.25, dt);
-    let steps = 0;
-    while (this.acc >= LOGIC_DT && steps < MAX_CATCHUP_STEPS) {
-      this.runner.step();
-      this.acc -= LOGIC_DT;
-      steps++;
+    // 固定步长逻辑（确定性内核约束：逻辑只吃 LOGIC_DT）；退出确认弹窗打开时暂停
+    if (this.confirmingExit) {
+      this.acc = 0;
+    } else {
+      this.acc += Math.min(0.25, dt);
+      let steps = 0;
+      while (this.acc >= LOGIC_DT && steps < MAX_CATCHUP_STEPS) {
+        this.runner.step();
+        this.acc -= LOGIC_DT;
+        steps++;
+      }
+      if (steps === MAX_CATCHUP_STEPS) this.acc = 0;
     }
-    if (steps === MAX_CATCHUP_STEPS) this.acc = 0;
 
     const game = this.game;
     updateEffects(dt);
@@ -147,20 +171,62 @@ export class GameScene implements Scene {
         again: { x: x0, y, w: bw, h: bh },
         next: { x: x0 + bw + gap, y, w: bw, h: bh },
         back: { x: x0 + (bw + gap) * 2, y, w: bw, h: bh },
-        board: { x: w / 2 - 130, y: y + bh + 12, w: 260, h: 40 },
+        board: { x: w / 2 - 130, y: y + bh + 12, w: 126, h: 40 },
+        replay: { x: w / 2 + 4, y: y + bh + 12, w: 126, h: 40 },
       };
       drawButton(ctx, this.settleButtons.again, "↻ 再来", { color: THEME.green, fontPx: 17 });
       drawButton(ctx, this.settleButtons.next, "下一关 ›", { fontPx: 17 });
       drawButton(ctx, this.settleButtons.back, "选关", { color: THEME.wood, fontPx: 17 });
-      drawButton(ctx, this.settleButtons.board, "🏅 排行榜", { color: THEME.dark, fontPx: 15 });
+      drawButton(ctx, this.settleButtons.board, "🏅 排行榜", { color: THEME.dark, fontPx: 14 });
+      drawButton(ctx, this.settleButtons.replay, "▶ 回放", { color: THEME.dark, fontPx: 14 });
     } else {
       this.settleButtons = null;
+    }
+
+    // 退出确认弹窗（最顶层）：需二次确认才离开本关
+    if (this.confirmingExit) {
+      ctx.fillStyle = "rgba(0,0,0,0.45)";
+      ctx.fillRect(0, 0, w, h);
+      const cw = Math.min(340, w - 48);
+      const chh = 196;
+      const card: Rect = { x: w / 2 - cw / 2, y: h / 2 - chh / 2, w: cw, h: chh };
+      ctx.fillStyle = THEME.light;
+      roundRect(ctx, card, 16);
+      ctx.fill();
+      ctx.fillStyle = THEME.text;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.font = "800 22px system-ui, sans-serif";
+      ctx.fillText("退出本关？", w / 2, card.y + 44);
+      ctx.font = "14px system-ui, sans-serif";
+      ctx.fillStyle = "rgba(79,63,48,0.85)";
+      ctx.fillText("本次尝试不保留，确定要退出吗？", w / 2, card.y + 82);
+      const bw2 = (cw - 16 * 3) / 2;
+      this.confirmBtns = {
+        no: { x: card.x + 16, y: card.y + chh - 64, w: bw2, h: 46 },
+        yes: { x: card.x + 16 * 2 + bw2, y: card.y + chh - 64, w: bw2, h: 46 },
+      };
+      drawButton(ctx, this.confirmBtns.no, "继续爬", { color: THEME.green, fontPx: 17 });
+      drawButton(ctx, this.confirmBtns.yes, "退出", { color: THEME.accent, fontPx: 17 });
+      ctx.textBaseline = "alphabetic";
+    } else {
+      this.confirmBtns = null;
     }
   }
 
   onDown(e: PointerEvt) {
     const game = this.game;
     const cam = this.cam;
+
+    // 退出确认弹窗打开时：只响应弹窗按钮
+    if (this.confirmingExit) {
+      if (this.confirmBtns && inRect(e, this.confirmBtns.yes)) {
+        this.confirmingExit = false;
+        return this.nav.exit();
+      }
+      if (this.confirmBtns && inRect(e, this.confirmBtns.no)) this.confirmingExit = false;
+      return;
+    }
 
     // 结算按钮（再来/下一关都重开 tape：每次提交都是干净的单关回放）
     if (this.settleButtons) {
@@ -175,14 +241,22 @@ export class GameScene implements Scene {
       if (inRect(e, this.settleButtons.back)) return this.nav.exit();
       if (inRect(e, this.settleButtons.board))
         return this.nav.leaderboard?.(game.level.id, game.level.name);
+      if (inRect(e, this.settleButtons.replay) && this.nav.replay) {
+        this.resumeOnEnter = true; // 回放结束返回时保留结算态
+        return this.nav.replay(this.runner.exportReplay());
+      }
     }
 
     const hitIcon = (ic?: { x: number; y: number; r: number }) =>
       !!ic && Math.hypot(e.x - ic.x, e.y - ic.y) <= ic.r + 6;
 
-    // HUD：↻ 重置；⤴ 返回选关；↶ 回退
+    // HUD：↻ 重置；⤴ 返回选关（非结算态需二次确认）；↶ 回退
     if (this.hud && hitIcon(this.hud.reset)) return this.runner.dispatch({ e: "reset" });
-    if (this.hud && hitIcon(this.hud.exit)) return this.nav.exit();
+    if (this.hud && hitIcon(this.hud.exit)) {
+      if (game.status === "won") return this.nav.exit(); // 已完攀：直接走
+      this.confirmingExit = true;
+      return;
+    }
     if (this.hud && hitIcon(this.hud.undo)) return this.runner.dispatch({ e: "undo" });
 
     if (game.status === "won" || game.status === "fallen") return;
