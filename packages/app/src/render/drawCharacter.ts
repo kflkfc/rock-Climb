@@ -89,8 +89,26 @@ const perpUnit = (a: Pt, b: Pt): Pt => nrm(-(b.y - a.y), b.x - a.x);
 let faceAnim = 0;
 let lastNow = -1;
 
+/** 单段锥形胶囊：a(宽 wa) → b(宽 wb)，两端圆帽。直段贴合骨骼，不产生弧形漂移。 */
+function taperSeg(ctx: CanvasRenderingContext2D, a: Pt, b: Pt, wa: number, wb: number) {
+  const n = perpUnit(a, b);
+  const angN = Math.atan2(n.y, n.x);
+  ctx.beginPath();
+  ctx.moveTo(a.x + (n.x * wa) / 2, a.y + (n.y * wa) / 2);
+  ctx.lineTo(b.x + (n.x * wb) / 2, b.y + (n.y * wb) / 2);
+  ctx.arc(b.x, b.y, wb / 2, angN, angN - Math.PI, true); // 末端圆帽
+  ctx.lineTo(a.x - (n.x * wa) / 2, a.y - (n.y * wa) / 2);
+  ctx.arc(a.x, a.y, wa / 2, angN - Math.PI, angN - Math.PI * 2, true); // 根端圆帽
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = OUTLINE;
+  ctx.lineWidth = 1.2;
+  ctx.stroke();
+}
+
 /**
- * 锥形软管肢体：根粗→关节→梢细，两侧二次曲线过关节 → 圆滑的肘/膝，无火柴感。
+ * 锥形肢体：根粗→关节→梢细。两段直的锥形胶囊 + 关节圆帽自然衔接——
+ * 肘/膝清晰可见（此前用二次曲线整段弯过关节，弯腿会被拉成"香蕉弧"，已废弃）。
  */
 function taperedLimb(
   ctx: CanvasRenderingContext2D,
@@ -102,29 +120,10 @@ function taperedLimb(
   we: number,
   color: string,
 ) {
-  const n1 = perpUnit(a, j);
-  const n2 = perpUnit(j, e);
-  let nj = nrm(n1.x + n2.x, n1.y + n2.y);
-  if (!Number.isFinite(nj.x) || (nj.x === 0 && nj.y === 0)) nj = n1;
-  const aL: Pt = { x: a.x + (n1.x * wa) / 2, y: a.y + (n1.y * wa) / 2 };
-  const aR: Pt = { x: a.x - (n1.x * wa) / 2, y: a.y - (n1.y * wa) / 2 };
-  const jL: Pt = { x: j.x + (nj.x * wj) / 2, y: j.y + (nj.y * wj) / 2 };
-  const jR: Pt = { x: j.x - (nj.x * wj) / 2, y: j.y - (nj.y * wj) / 2 };
-  const eL: Pt = { x: e.x + (n2.x * we) / 2, y: e.y + (n2.y * we) / 2 };
-  const angE = Math.atan2(n2.y, n2.x);
-  const angA = Math.atan2(n1.y, n1.x);
   ctx.fillStyle = color;
-  ctx.beginPath();
-  ctx.moveTo(aL.x, aL.y);
-  ctx.quadraticCurveTo(jL.x, jL.y, eL.x, eL.y);
-  ctx.arc(e.x, e.y, we / 2, angE, angE - Math.PI, true); // 末端圆帽
-  ctx.quadraticCurveTo(jR.x, jR.y, aR.x, aR.y);
-  ctx.arc(a.x, a.y, wa / 2, angA - Math.PI, angA, true); // 根端圆帽
-  ctx.closePath();
-  ctx.fill();
-  ctx.strokeStyle = OUTLINE;
-  ctx.lineWidth = 1.2;
-  ctx.stroke();
+  taperSeg(ctx, a, j, wa, wj);
+  ctx.fillStyle = color;
+  taperSeg(ctx, j, e, wj, we);
 }
 
 /** 成形躯干：圆肩盖 + 两侧收腰曲线 + 圆臀底，按皮肤出 V 型胸 / 沙漏腰 / 桶胸 */
