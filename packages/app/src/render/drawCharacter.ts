@@ -32,6 +32,10 @@ interface Palette {
   hipK: number; // 髋宽系数
   waistK: number; // 收腰系数（越小腰越细）
   headK: number; // 头围系数（卡通大头）
+  sleeveless?: boolean; // 吊带装：上臂不画袖子（全肤色）
+  skirt?: string; // 裙色（与上衣分离；lady 粉裙）
+  sock?: string; // 袜色（脚踝一小截，kid 白袜）
+  stripe?: string; // T 恤胸前条纹色（kid）
 }
 
 const PALETTES: Record<Skin, Palette> = {
@@ -42,15 +46,19 @@ const PALETTES: Record<Skin, Palette> = {
     widthK: 1, shoulderK: 1.0, hipK: 0.85, waistK: 0.8, headK: 1.08,
   },
   kid: {
-    skin: "#B98A6A", skinDk: "#9E7355",
-    top: "#4A90D9", bottom: "#E5A636", legs: "#B98A6A", foreArm: "#B98A6A",
-    hair: "#2B2B2B", shoe: "#D64A47", shoeHi: "#E98884",
+    // 设计稿：白 T 蓝胸纹 + 蓝短裤白裤边 + 白袜灰运动鞋 + 深棕蓬发 + 白皙肤色
+    skin: "#F2C9A4", skinDk: "#D9A87F",
+    top: "#F7F4EC", bottom: "#3D6FD0", legs: "#F2C9A4", foreArm: "#F2C9A4",
+    hair: "#5A3A24", shoe: "#8A8580", shoeHi: "#B5B0AA",
+    stripe: "#3D7DD8", sock: "#FFFFFF",
     widthK: 0.85, shoulderK: 0.88, hipK: 0.9, waistK: 0.92, headK: 1.28,
   },
   lady: {
-    skin: "#C79B77", skinDk: "#A87F5E",
-    top: "#C94F6D", bottom: "#C94F6D", legs: "#C79B77", foreArm: "#C79B77",
-    hair: "#5A3A22", shoe: "#7A4A8C", shoeHi: "#9A6AAC",
+    // 设计稿：黑色高马尾 + 白皙肤色；用户定制：浅蓝吊带（背部交叉细带）+ 粉色短裙
+    skin: "#F0C8A8", skinDk: "#D2A382",
+    top: "#A8CBE8", bottom: "#A8CBE8", legs: "#F0C8A8", foreArm: "#F0C8A8",
+    hair: "#26221F", shoe: "#7A4A8C", shoeHi: "#9A6AAC",
+    sleeveless: true, skirt: "#F09CB8",
     widthK: 0.85, shoulderK: 0.82, hipK: 0.95, waistK: 0.6, headK: 1.1,
   },
   monkey: {
@@ -66,8 +74,9 @@ const PALETTES: Record<Skin, Palette> = {
     widthK: 1.55, shoulderK: 1.4, hipK: 0.95, waistK: 1.12, headK: 1.15,
   },
   suit: {
-    skin: "#C79B77", skinDk: "#A87F5E",
-    top: "#23262E", bottom: "#23262E", legs: "#23262E", foreArm: "#23262E",
+    // 设计稿：深蓝灰西装 + 白衬衫 + 深蓝领带 + 圆框眼镜 + 清爽黑发
+    skin: "#EAC3A0", skinDk: "#CBA07D",
+    top: "#3A4050", bottom: "#3A4050", legs: "#3A4050", foreArm: "#3A4050",
     hair: "#1A1A1A", shoe: "#14151A", shoeHi: "#3A3D46",
     widthK: 1.05, shoulderK: 1.18, hipK: 0.82, waistK: 0.85, headK: 1.08,
   },
@@ -88,6 +97,9 @@ const perpUnit = (a: Pt, b: Pt): Pt => nrm(-(b.y - a.y), b.x - a.x);
 // ---- 回眸转头动画（模块级渲染状态：一次只有一个场景在画角色） ----
 let faceAnim = 0;
 let lastNow = -1;
+// ---- 运动驱动的裙摆/马尾摆：骨盆横向速度低通（同屏只有一个 lady 在动，共享无碍） ----
+let swaySmooth = 0;
+let prevPelvis: Pt | null = null;
 
 /** 单段锥形胶囊：a(宽 wa) → b(宽 wb)，两端圆帽。直段贴合骨骼，不产生弧形漂移。 */
 function taperSeg(ctx: CanvasRenderingContext2D, a: Pt, b: Pt, wa: number, wb: number) {
@@ -315,30 +327,8 @@ function drawWinFace(ctx: CanvasRenderingContext2D, R: number, skin: Skin, pal: 
     ctx.stroke();
   }
 
-  // ---- 眼睛 ----
-  if (skin === "suit") {
-    // 墨镜：圆角镜片 + 鼻梁 + 镜片高光
-    const gw = 0.44 * R;
-    const gh = 0.32 * R;
-    for (const sgn of [-1, 1]) {
-      ctx.fillStyle = "#101014";
-      ctx.beginPath();
-      ctx.roundRect(sgn * 0.34 * R - gw / 2, eyeY - gh / 2, gw, gh, 0.11 * R);
-      ctx.fill();
-      ctx.strokeStyle = "rgba(255,255,255,0.35)";
-      ctx.lineWidth = 0.035 * R;
-      ctx.beginPath();
-      ctx.moveTo(sgn * 0.34 * R - gw * 0.28, eyeY - gh * 0.2);
-      ctx.lineTo(sgn * 0.34 * R - gw * 0.05, eyeY + gh * 0.16);
-      ctx.stroke();
-    }
-    ctx.strokeStyle = "#101014";
-    ctx.lineWidth = 0.06 * R;
-    ctx.beginPath();
-    ctx.moveTo(-0.14 * R, eyeY);
-    ctx.lineTo(0.14 * R, eyeY);
-    ctx.stroke();
-  } else {
+  // ---- 眼睛（全皮肤通用大眼；suit 再叠圆框眼镜） ----
+  {
     // 眼白 + 虹膜 + 高光（迪士尼大眼）
     const ew = skin === "kid" ? 0.19 * R : 0.16 * R;
     const eh = skin === "kid" ? 0.23 * R : 0.2 * R;
@@ -384,6 +374,39 @@ function drawWinFace(ctx: CanvasRenderingContext2D, R: number, skin: Skin, pal: 
     }
   }
 
+  // suit：圆框细线眼镜（设计稿）——镜圈 + 鼻梁 + 短镜腿
+  if (skin === "suit") {
+    ctx.strokeStyle = "#2B2318";
+    ctx.lineWidth = Math.max(1.2, 0.05 * R);
+    ctx.lineCap = "round";
+    const gr = 0.24 * R;
+    for (const sgn of [-1, 1]) {
+      ctx.beginPath();
+      ctx.arc(sgn * eyeDX, eyeY, gr, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    ctx.beginPath(); // 鼻梁
+    ctx.moveTo(-eyeDX + gr, eyeY - 0.04 * R);
+    ctx.quadraticCurveTo(0, eyeY - 0.1 * R, eyeDX - gr, eyeY - 0.04 * R);
+    ctx.stroke();
+    for (const sgn of [-1, 1]) {
+      ctx.beginPath(); // 镜腿
+      ctx.moveTo(sgn * (eyeDX + gr), eyeY);
+      ctx.lineTo(sgn * 0.86 * R, eyeY - 0.08 * R);
+      ctx.stroke();
+    }
+  }
+
+  // lady：金色小耳环（耳位下缘）
+  if (skin === "lady") {
+    ctx.fillStyle = "#D9A93C";
+    for (const sgn of [-1, 1]) {
+      ctx.beginPath();
+      ctx.arc(sgn * 0.88 * R, 0.28 * R, 0.07 * R, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
   // ---- 鼻 ----
   if (isAnimal(skin)) {
     ctx.fillStyle = skin === "gorilla" ? "#2A2A32" : "#5A3A22";
@@ -401,9 +424,9 @@ function drawWinFace(ctx: CanvasRenderingContext2D, R: number, skin: Skin, pal: 
     ctx.stroke();
   }
 
-  // ---- 笑口：嘴角上扬的开口笑（贝塞尔嘴型，非几何半圆） ----
+  // ---- 笑口：嘴角上扬的开口笑（贝塞尔嘴型，非几何半圆；suit 斯文小笑） ----
   const my = skin === "monkey" ? 0.44 * R : 0.34 * R;
-  const mw = skin === "gorilla" ? 0.42 * R : 0.3 * R;
+  const mw = skin === "gorilla" ? 0.42 * R : skin === "suit" ? 0.24 * R : 0.3 * R;
   ctx.fillStyle = skin === "lady" ? "#8E2F3C" : "#5A2A20";
   ctx.beginPath();
   ctx.moveTo(-mw, my - 0.06 * R);
@@ -411,7 +434,7 @@ function drawWinFace(ctx: CanvasRenderingContext2D, R: number, skin: Skin, pal: 
   ctx.quadraticCurveTo(0, my + 0.02 * R, -mw, my - 0.06 * R); // 上唇线（浅弯）
   ctx.closePath();
   ctx.fill();
-  if (skin === "gorilla" || skin === "suit") {
+  if (skin === "gorilla") {
     // 露齿
     ctx.fillStyle = "#F5EBD3";
     ctx.beginPath();
@@ -476,6 +499,15 @@ export function drawCharacter(ctx: CanvasRenderingContext2D, cam: Camera, pose: 
   else faceAnim = 0;
   const faceK = 1 - Math.pow(1 - faceAnim, 3); // ease-out
 
+  // 运动摇摆：骨盆沿躯干 right 轴的速度 → 低通 → 裙摆/马尾滞后甩动（反向）
+  if (prevPelvis && rdt > 0) {
+    const latV =
+      ((P.pelvis.x - prevPelvis.x) * right.x + (P.pelvis.y - prevPelvis.y) * right.y) / rdt;
+    const target = Math.max(-0.35, Math.min(0.35, -latV * 0.0015));
+    swaySmooth += (target - swaySmooth) * Math.min(1, rdt * 6);
+  }
+  prevPelvis = { x: P.pelvis.x, y: P.pelvis.y };
+
   // 猴子尾巴（最底层）：从骨盆甩出的 S 形曲线，随时间轻摆
   if (skinId === "monkey") {
     const wag = Math.sin(t * 2.1) * 0.25;
@@ -496,10 +528,23 @@ export function drawCharacter(ctx: CanvasRenderingContext2D, cam: Camera, pose: 
     ctx.stroke();
   }
 
-  // 腿（后层）：锥形软管（大腿粗 → 脚踝细）
+  // 腿（后层）：锥形软管（大腿粗 → 脚踝细）；配袜色则脚踝加一小截袜带
   for (const l of ["LF", "RF"] as Limb[]) {
     const k = pose.limb[l];
-    taperedLimb(ctx, S(k.root), S(k.ik.joint), S(k.ik.end), limbW * 1.3, limbW * 1.0, limbW * 0.62, pal.legs);
+    const j = S(k.ik.joint);
+    const e = S(k.ik.end);
+    taperedLimb(ctx, S(k.root), j, e, limbW * 1.3, limbW * 1.0, limbW * 0.62, pal.legs);
+    if (pal.sock) {
+      ctx.strokeStyle = pal.sock;
+      ctx.lineWidth = limbW * 0.66;
+      ctx.lineCap = "round";
+      const c0 = mix(j, e, 0.78);
+      const c1 = mix(j, e, 0.92);
+      ctx.beginPath();
+      ctx.moveTo(c0.x, c0.y);
+      ctx.lineTo(c1.x, c1.y);
+      ctx.stroke();
+    }
   }
 
   // 短裤/裤装（人类，lady 由裙盖）：臀座圆 + 两截裤管盖住髋关节与大腿根
@@ -526,6 +571,44 @@ export function drawCharacter(ctx: CanvasRenderingContext2D, cam: Camera, pose: 
 
   // 躯干（成形轮廓：圆肩/收腰/圆臀）
   drawTorso(ctx, P.shoulderC, P.pelvis, down, right, torsoLen, torsoW, pal);
+
+  // kid：T 恤胸前横条纹（设计稿蓝条纹）
+  if (pal.stripe) {
+    const c = mix(P.shoulderC, P.pelvis, 0.3);
+    ctx.strokeStyle = pal.stripe;
+    ctx.lineWidth = torsoLen * 0.14;
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    ctx.moveTo(c.x - right.x * torsoW * 0.48, c.y - right.y * torsoW * 0.48);
+    ctx.lineTo(c.x + right.x * torsoW * 0.48, c.y + right.y * torsoW * 0.48);
+    ctx.stroke();
+  }
+
+  // lady：吊带装——裸肩背（肩部盖肤色带）+ 背部交叉细吊带
+  if (skinId === "lady") {
+    const shHalf = torsoW * 0.62 * pal.shoulderK;
+    ctx.strokeStyle = pal.skin;
+    ctx.lineWidth = torsoLen * 0.3; // 盖掉躯干上段的衣色 → 露背
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    ctx.moveTo(P.shoulderC.x - right.x * shHalf * 0.62, P.shoulderC.y - right.y * shHalf * 0.62);
+    ctx.lineTo(P.shoulderC.x + right.x * shHalf * 0.62, P.shoulderC.y + right.y * shHalf * 0.62);
+    ctx.stroke();
+    // 交叉细带：肩两侧 → 对侧腰线，背面成 X
+    const wC = mix(P.shoulderC, P.pelvis, 0.55);
+    const waistHalf = Math.min(shHalf, torsoW * 0.58 * pal.hipK) * pal.waistK;
+    ctx.strokeStyle = pal.top;
+    ctx.lineWidth = Math.max(2, torsoW * 0.09);
+    for (const sgn of [-1, 1]) {
+      ctx.beginPath();
+      ctx.moveTo(
+        P.shoulderC.x + sgn * right.x * shHalf * 0.55,
+        P.shoulderC.y + sgn * right.y * shHalf * 0.55,
+      );
+      ctx.lineTo(wC.x - sgn * right.x * waistHalf * 0.7, wC.y - sgn * right.y * waistHalf * 0.7);
+      ctx.stroke();
+    }
+  }
 
   // 金刚银背：背部浅灰斑
   if (skinId === "gorilla") {
@@ -554,9 +637,9 @@ export function drawCharacter(ctx: CanvasRenderingContext2D, cam: Camera, pose: 
     ctx.stroke();
   }
 
-  // 美女裙摆：高腰宽摆（盖住髋关节），三瓣波浪裙边，随时间左右摇
+  // 美女裙摆：高腰宽摆（盖住髋关节），三瓣波浪裙边；随运动甩动 + 时间微摆
   if (skinId === "lady") {
-    const sway = Math.sin(t * 2.8) * 0.18;
+    const sway = Math.sin(t * 2.8) * 0.08 + swaySmooth;
     const hipHalf = torsoW * 0.58 * pal.hipK;
     const waistC: Pt = {
       x: P.pelvis.x - down.x * torsoLen * 0.14,
@@ -571,7 +654,7 @@ export function drawCharacter(ctx: CanvasRenderingContext2D, cam: Camera, pose: 
     };
     const wl = { x: waistC.x - right.x * waistHalf, y: waistC.y - right.y * waistHalf };
     const wr = { x: waistC.x + right.x * waistHalf, y: waistC.y + right.y * waistHalf };
-    ctx.fillStyle = pal.top;
+    ctx.fillStyle = pal.skirt ?? pal.top;
     ctx.beginPath();
     ctx.moveTo(wl.x, wl.y);
     // 左裙摆外扩弧
@@ -627,8 +710,9 @@ export function drawCharacter(ctx: CanvasRenderingContext2D, cam: Camera, pose: 
     const j = S(k.ik.joint);
     const e = S(k.ik.end);
     // 上臂衣色到肘，前臂按皮肤 —— 用整段锥形一次画（颜色分段：先整条前臂色，再覆盖上臂段）
+    // 吊带装（sleeveless）：不画袖子，整臂肤色
     taperedLimb(ctx, a, j, e, limbW * 1.15, limbW * 0.9, limbW * 0.55, pal.foreArm);
-    if (pal.top !== pal.foreArm) {
+    if (pal.top !== pal.foreArm && !pal.sleeveless) {
       // 短袖：肩→肘再多出一点点，盖出袖口
       taperedLimb(ctx, a, mix(a, j, 0.7), mix(a, j, 1.12), limbW * 1.18, limbW * 1.05, limbW * 0.95, pal.top);
     }
@@ -745,6 +829,25 @@ export function drawCharacter(ctx: CanvasRenderingContext2D, cam: Camera, pose: 
         ctx.quadraticCurveTo(headR * 0.5, -headR * 0.5, headR * 0.05, -headR * 0.6);
         ctx.closePath();
         ctx.fill();
+      } else if (skinId === "kid") {
+        // 蓬松刘海：额前三团圆弧（设计稿乱蓬发）
+        for (const [bx, by, br] of [
+          [-0.48, -0.62, 0.3],
+          [-0.02, -0.74, 0.34],
+          [0.46, -0.6, 0.28],
+        ] as const) {
+          ctx.beginPath();
+          ctx.arc(bx * headR, by * headR, br * headR, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      } else if (skinId === "suit") {
+        // 整洁侧分：一条细分缝线
+        ctx.strokeStyle = "rgba(245,235,211,0.35)";
+        ctx.lineWidth = Math.max(1, headR * 0.04);
+        ctx.beginPath();
+        ctx.moveTo(-headR * 0.28, -headR * 0.95);
+        ctx.quadraticCurveTo(-headR * 0.42, -headR * 0.75, -headR * 0.52, -headR * 0.55);
+        ctx.stroke();
       }
     }
     drawWinFace(ctx, headR, skinId, pal);
@@ -762,19 +865,72 @@ export function drawCharacter(ctx: CanvasRenderingContext2D, cam: Camera, pose: 
     ctx.stroke();
   }
 
-  // 美女马尾：脑后甩出、随时间摆
+  // 美女高马尾（设计稿）：发根在头顶偏后 + 黑发圈结 + 长尾束，随运动甩动
   if (skinId === "lady") {
-    const ps = Math.sin(t * 2.6) * 0.3;
+    const ps = Math.sin(t * 2.6) * 0.12 + swaySmooth * 1.4;
     ctx.strokeStyle = pal.hair;
-    ctx.lineWidth = headR * 0.34;
+    ctx.lineWidth = headR * 0.38;
     ctx.lineCap = "round";
     ctx.beginPath();
-    ctx.moveTo(headR * 0.2, -headR * 0.85);
-    ctx.quadraticCurveTo(headR * 1.15, -headR * 0.25, headR * (0.9 + ps * 0.4), headR * 1.0);
+    ctx.moveTo(headR * 0.05, -headR * 0.98); // 顶部发根
+    ctx.quadraticCurveTo(
+      headR * (0.85 + ps * 0.3),
+      -headR * 0.55,
+      headR * (0.72 + ps * 0.6),
+      headR * 0.85,
+    );
+    ctx.quadraticCurveTo(
+      headR * (0.6 + ps * 1.1),
+      headR * 1.45,
+      headR * (0.34 + ps * 1.3),
+      headR * 1.75, // 尾束加长
+    );
     ctx.stroke();
+    // 发圈结
+    ctx.fillStyle = "#111111";
+    ctx.beginPath();
+    ctx.arc(headR * 0.14, -headR * 0.92, headR * 0.15, 0, Math.PI * 2);
+    ctx.fill();
   }
 
   ctx.restore();
+
+  // 西装：回眸定格时颈下露出深蓝领带（结 + 短带）
+  if (skinId === "suit" && faceK > 0.5) {
+    const nx = P.neck.x;
+    const ny = P.neck.y;
+    const pt = (rx: number, dy: number): Pt => ({
+      x: nx + right.x * headR * rx + down.x * headR * dy,
+      y: ny + right.y * headR * rx + down.y * headR * dy,
+    });
+    ctx.fillStyle = "#2A3A5E";
+    ctx.globalAlpha = Math.min(1, (faceK - 0.5) * 4); // 随转头淡入
+    // 结
+    const k0 = pt(0, 0.08);
+    const k1 = pt(0.17, 0.3);
+    const k2 = pt(0, 0.52);
+    const k3 = pt(-0.17, 0.3);
+    ctx.beginPath();
+    ctx.moveTo(k0.x, k0.y);
+    ctx.lineTo(k1.x, k1.y);
+    ctx.lineTo(k2.x, k2.y);
+    ctx.lineTo(k3.x, k3.y);
+    ctx.closePath();
+    ctx.fill();
+    // 短带
+    const t0 = pt(0, 0.44);
+    const t1 = pt(0.15, 1.1);
+    const t2 = pt(0, 1.35);
+    const t3 = pt(-0.15, 1.1);
+    ctx.beginPath();
+    ctx.moveTo(t0.x, t0.y);
+    ctx.lineTo(t1.x, t1.y);
+    ctx.lineTo(t2.x, t2.y);
+    ctx.lineTo(t3.x, t3.y);
+    ctx.closePath();
+    ctx.fill();
+    ctx.globalAlpha = 1;
+  }
 
   // 脚：动物爪掌 / 人类攀岩鞋（西装暴徒 = 黑皮鞋同形）
   for (const l of ["LF", "RF"] as Limb[]) {
