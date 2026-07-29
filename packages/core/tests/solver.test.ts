@@ -1,9 +1,12 @@
 import { describe, it, expect } from "vitest";
 import { solveLevel } from "../src/solver/solver.ts";
-import { LEVELS, LEVEL_V7 } from "../src/level/levels.ts";
+import { LEVELS, OFFICIAL_LEVELS, LEVEL_V7 } from "../src/level/levels.ts";
 
+// 实验室诊断线 x1 不在此列：静态试解器与 solvePelvis 共用同一套方向近似
+// （正是它要诊断的东西），且默认 candPerLimb=8 的剪枝会在旁挂点多的线上误判。
+// x1 的可通关性由 labRoute.test.ts 用真引擎跑参考序列证明。
 describe("AI 试解器 · 出厂检验（CI：官方关卡必须 AI 可解）", () => {
-  for (const level of LEVELS) {
+  for (const level of OFFICIAL_LEVELS) {
     it(`${level.id} ${level.name} (${level.grade}) 可解`, () => {
       const r = solveLevel(level);
       expect(r.solvable, `nodes=${r.nodesExpanded}`).toBe(true);

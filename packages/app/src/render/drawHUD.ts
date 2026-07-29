@@ -4,6 +4,7 @@
 import { Camera } from "./camera.ts";
 import { Game } from "@kkc/core/sim/gameState.ts";
 import { isBalanced, SLIP_REASON_LABEL } from "@kkc/core/sim/physics.ts";
+import { wallAngleAtY } from "@kkc/core/level/levelSchema.ts";
 
 const LIMB_LABEL = { LH: "左手", RH: "右手", LF: "左脚", RF: "右脚" } as const;
 
@@ -40,8 +41,9 @@ export function drawHUD(ctx: CanvasRenderingContext2D, cam: Camera, game: Game):
   ctx.font = "700 20px system-ui, sans-serif";
   ctx.fillText(`${game.gripCount} / ⭐${game.level.starThreshold}`, W - 16, H - 40);
 
-  // 墙角侧视小图标（右上）
-  drawWallIcon(ctx, W - 54, 20, game.level.wallAngleDeg);
+  // 墙角侧视小图标（右上）：取角色所在高度的**局部**墙角——
+  // 分段墙(v5/v8/v9/x1)上身体一路穿过不同角度，显示关卡底角会误导。
+  drawWallIcon(ctx, W - 54, 20, wallAngleAtY(game.level, game.c.pose.com.y));
 
   // 失衡警示 / 腾空指示
   if (game.status === "climbing" && game.c.dyno) {
@@ -190,6 +192,6 @@ function drawWallIcon(ctx: CanvasRenderingContext2D, x: number, y: number, deg: 
   ctx.fillStyle = "#4F3F30";
   ctx.font = "11px system-ui";
   ctx.textAlign = "center";
-  ctx.fillText(`${deg}°`, 14, 36);
+  ctx.fillText(`${Math.round(deg)}°`, 14, 36); // 分段墙过渡带会给出小数
   ctx.restore();
 }

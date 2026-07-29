@@ -11,7 +11,7 @@ import { describe, it, expect } from "vitest";
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { LEVELS } from "../src/level/levels.ts";
+import { LEVELS, OFFICIAL_LEVELS, LAB_LEVEL_IDS } from "../src/level/levels.ts";
 import { GameRunner, replayRun } from "../src/replay/runner.ts";
 import { Replay } from "../src/replay/format.ts";
 import { CORE_VERSION } from "../src/version.ts";
@@ -26,8 +26,10 @@ interface GoldenFile {
   replay: Replay;
 }
 
-describe(`黄金回放 · ${LEVELS.length} 关（core v${CORE_VERSION}）`, () => {
+describe(`黄金回放 · ${OFFICIAL_LEVELS.length} 关（core v${CORE_VERSION}）`, () => {
   LEVELS.forEach((level, i) => {
+    // 实验室诊断线不入黄金（理由见 levels.ts 的 LAB_LEVEL_IDS）；索引 i 仍取自 LEVELS
+    if (LAB_LEVEL_IDS.has(level.id)) return;
     it(`${level.id} (${level.name}) 重演哈希一致`, () => {
       const file = join(GOLDEN_DIR, `${level.id}.json`);
 

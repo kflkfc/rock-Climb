@@ -7,6 +7,7 @@ import { TUTORIAL_LEVELS } from "./tutorial.ts";
 import { SLAB_LEVELS, SLAB_SEQS } from "./slabGym.ts";
 import { MIXED_LEVELS, MIXED_SEQS } from "./mixedGym.ts";
 import { ROOF_LEVELS, ROOF_SEQS } from "./roofGym.ts";
+import { LAB_LEVEL, LAB_SEQ } from "./labRoute.ts";
 import { GYMS } from "./gyms.ts";
 
 // ---- V1 KLIFR：基本垂直，15 点 ----
@@ -223,7 +224,7 @@ const CALIBRATED: Record<string, { targetMoves: number; targetTimeSec: number }>
 };
 
 // 三馆视觉差异（GDD 4.7）：墙面 HSL 色相按所属岩馆
-const GYM_HUE: Record<string, number> = { tutorial: 43, slab: 47, mixed: 36, roof: 20 };
+const GYM_HUE: Record<string, number> = { tutorial: 43, slab: 47, mixed: 36, roof: 20, lab: 200 };
 function hueOf(id: string): number | undefined {
   for (const g of GYMS) if (g.levelIds.includes(id)) return GYM_HUE[g.id];
   return undefined;
@@ -244,11 +245,23 @@ export const LEVELS: LevelDef[] = [
   ...SLAB_LEVELS, // index 17-26
   ...MIXED_LEVELS, // index 27-30
   ...ROOF_LEVELS, // index 31-37
+  LAB_LEVEL, // index 38（实验室诊断线，非正式内容）
 ].map((lv) => ({
   ...lv,
   ...(CALIBRATED[lv.id] ? { stars: CALIBRATED[lv.id] } : {}),
   ...(hueOf(lv.id) != null ? { wallHue: hueOf(lv.id) } : {}),
 }));
+
+/**
+ * 实验室诊断线（非正式内容）：不进黄金回放、不进 AI 试解器出厂检验。
+ * 理由：①它按需改动，不该拖着 38 份黄金一起重录；
+ *      ②静态试解器与 solvePelvis 共用同一套方向近似，正是它要诊断的东西。
+ * 可通关性由 tests/labRoute.test.ts 用真引擎跑参考序列保证（比静态解更强）。
+ */
+export const LAB_LEVEL_IDS: ReadonlySet<string> = new Set(["x1"]);
+
+/** 出厂检验/黄金回放覆盖的正式关卡 */
+export const OFFICIAL_LEVELS: LevelDef[] = LEVELS.filter((l) => !LAB_LEVEL_IDS.has(l.id));
 
 /** 开发/测试用：各关一条参考攀爬序列。 */
 export const LEVEL_SEQS: Record<string, [Limb, string][]> = {
@@ -263,4 +276,5 @@ export const LEVEL_SEQS: Record<string, [Limb, string][]> = {
   ...SLAB_SEQS,
   ...MIXED_SEQS,
   ...ROOF_SEQS,
+  x1: LAB_SEQ,
 };

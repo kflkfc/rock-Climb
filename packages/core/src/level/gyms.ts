@@ -39,4 +39,11 @@ export const GYMS: GymDef[] = [
     tint: "#CBB8A6",
     levelIds: ["r1", "v5", "r2", "r3", "r4", "v9", "r5", "v6", "r6", "r7"],
   },
+  {
+    id: "lab",
+    name: "🧪 实验室",
+    desc: "诊断线：全岩点类型一条过，专供手感验证（非正式内容）",
+    tint: "#BFD3D8",
+    levelIds: ["x1"],
+  },
 ];
