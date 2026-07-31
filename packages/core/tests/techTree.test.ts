@@ -26,15 +26,19 @@ describe("技术树 · 解锁", () => {
     expect(gripUnlocked("toe", 6)).toBe(true);
   });
 
-  it("抓法环按等级过滤：新手 crimp 环只有开掌，老手 5 项", () => {
+  it("抓法环按等级过滤：新手 crimp 环只有开掌，老手 4 项（lock 不适用小棱）", () => {
     const crimp = makeHold("c", "crimp", v(0, 0));
+    const pocket = makeHold("p", "pocket", v(0, 0));
     expect(gripOptions("RH", crimp, 2, Math.PI / 2, 1).map((o) => o.grip)).toEqual(["open"]);
-    expect(gripOptions("RH", crimp, 2, Math.PI / 2, 5).length).toBe(5);
-    expect(gripOptions("RH", crimp, 2, Math.PI / 2).length).toBe(5); // 默认全解锁
-    // 4 级：无 lock
-    const lv4 = gripOptions("RH", crimp, 2, Math.PI / 2, 4).map((o) => o.grip);
+    // crimp 上 lock 不成立 → 满级也只有 open/half/full/pinch 四项
+    expect(gripOptions("RH", crimp, 2, Math.PI / 2, 5).length).toBe(4);
+    expect(gripOptions("RH", crimp, 2, Math.PI / 2).length).toBe(4); // 默认全解锁
+    // 4 级：指洞上也还没解锁 lock
+    const lv4 = gripOptions("RH", pocket, 2, Math.PI / 2, 4).map((o) => o.grip);
     expect(lv4).not.toContain("lock");
     expect(lv4).toContain("full");
+    // 5 级 + 指洞：lock 才出现
+    expect(gripOptions("RH", pocket, 2, Math.PI / 2, 5).map((o) => o.grip)).toContain("lock");
   });
 
   it("Dyno 甩跳 Lv5 解锁：新手甩不出去", () => {

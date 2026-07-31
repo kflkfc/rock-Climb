@@ -47,6 +47,18 @@ export function gripsFor(limb: Limb): GripMethod[] {
   return isHand(limb) ? HAND_GRIPS : FOOT_GRIPS;
 }
 
+/** 指洞家族：只有这些岩点真能把手指伸进去（新增指洞档位时加进来） */
+export const POCKET_HOLDS: ReadonlySet<HoldType> = new Set<HoldType>(["pocket", "mono"]);
+
+/**
+ * 该抓法在此岩点上是否物理成立——不成立的**不进抓法环**（不是给个低分了事）。
+ * "扣指洞"没有洞可扣，在平点/滑面上根本不是一种抓法。
+ */
+export function gripApplicable(hold: HoldType, g: GripMethod): boolean {
+  if (g === "lock") return POCKET_HOLDS.has(hold);
+  return true;
+}
+
 export function gripTypeScore(hold: HoldType, g: GripMethod): number {
   if (g === "open" || g === "half" || g === "full" || g === "pinch" || g === "lock" || g === "slap")
     return HAND_TABLE[hold][g];
@@ -121,7 +133,7 @@ export function gripOptions(
   climberLevel = 10,
 ): GripOption[] {
   return gripsFor(limb)
-    .filter((g) => gripUnlocked(g, climberLevel))
+    .filter((g) => gripUnlocked(g, climberLevel) && gripApplicable(hold.type, g))
     .map((g) => ({
       grip: g,
       match: matchPercent({ hold, grip: g, distToCenter, pullRad }),

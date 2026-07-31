@@ -8,6 +8,7 @@ import {
   gripOptions,
   isPullingFootGrip,
   GRIP_LABEL,
+  POCKET_HOLDS,
 } from "../src/sim/grip.ts";
 import { v } from "../src/math/vec2.ts";
 
@@ -106,5 +107,15 @@ describe("匹配表 · 完整性与关键设计意图", () => {
     const opts = gripOptions("RH", h, 2, Math.PI / 2);
     expect(opts[0].grip).toBe("lock");
     expect(opts.length).toBe(5);
+  });
+
+  it("扣指洞只出现在指洞类岩点上（没有洞就不是一种抓法）", () => {
+    for (const t of HOLD_TYPES) {
+      if (!HOLD_META[t].hands) continue; // footchip 仅脚，本就没有手抓法环
+      const grips = gripOptions("RH", makeHold("h", t, v(0, 0)), 2, Math.PI / 2).map((o) => o.grip);
+      expect(grips.includes("lock"), `${t} 的抓法环`).toBe(POCKET_HOLDS.has(t));
+      expect(grips.length).toBeGreaterThan(0); // 过滤后不能把环清空
+    }
+    expect([...POCKET_HOLDS].sort()).toEqual(["mono", "pocket"]);
   });
 });

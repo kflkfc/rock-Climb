@@ -38,7 +38,9 @@ describe("Game · V4 交互闭环", () => {
     g.moveDrag({ ...mid.pos });
     g.endDrag();
     expect(g.status).toBe("ring"); // 非 Jug → 弹环
-    expect(g.ring!.options.length).toBe(5); // 正式版手部 5 抓法（开掌/半扣/全扣/捏/扣指洞）
+    // Crimp 环 4 项（开掌/半扣/全扣/捏）——扣指洞只出现在指洞类岩点上
+    expect(g.ring!.options.length).toBe(4);
+    expect(g.ring!.options.map((o) => o.grip)).not.toContain("lock");
     // 抓法环按匹配度降序，半扣应为首选
     expect(g.ring!.options[0].grip).toBe("half");
     g.chooseGrip(g.ring!.options[0]);
