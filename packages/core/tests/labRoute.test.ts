@@ -90,23 +90,40 @@ describe("实验室诊断线 x1 · 可通关性", () => {
   });
 });
 
-describe("实验室诊断线 x1 · 议题③ 方向求解现状基线（修好后应变红）", () => {
-  it("反肩 g1：抓法环最优匹配 <0.15，抓上即以 direction 脱手", () => {
+describe("实验室诊断线 x1 · 议题③ 方向求解（双瓣受力模型的验收关）", () => {
+  it("反肩 g1：抓得住，不再一碰就以 direction 脱手", () => {
     const runner = climbToDirectionStance();
     move(runner, "LH", "g1");
-    // 目标（修复后）：能抓住，且最优匹配 ≥0.45
-    expect(runner.game.c.limbs.LH.hold).toBeNull();
-    expect(runner.game.lastSlip?.reason).toBe("direction");
+    expect(runner.game.c.limbs.LH.hold?.id).toBe("g1");
+    expect(runner.game.c.limbs.LH.match).toBeGreaterThan(0.4);
+    // 动作判定：点在身体左侧、朝向也向左 → 向外撑 = 反肩
+    expect(runner.game.c.limbs.LH.move).toBe("gaston");
   });
 
-  it("反提 u1：抓得住但耐力 5s 掉 ≥40%（正常受力点同期 <10%）", () => {
+  /** 同一站位下，某肢挂到某点 5 秒的耐力掉幅（对照用） */
+  function drainOver5s(limb: Limb, holdId: string): number {
     const runner = climbToDirectionStance();
-    const before = runner.game.c.limbs.RH.stamina;
-    move(runner, "RH", "u1");
-    expect(runner.game.c.limbs.RH.hold?.id).toBe("u1");
+    const before = runner.game.c.limbs[limb].stamina;
+    move(runner, limb, holdId);
+    expect(runner.game.c.limbs[limb].hold?.id, `${limb} 没抓上 ${holdId}`).toBe(holdId);
     for (let f = 0; f < 300; f++) runner.step(); // 5s
-    const drop = before - runner.game.c.limbs.RH.stamina;
-    // 目标（修复后）：同样 5s 掉幅 <0.15
-    expect(drop).toBeGreaterThan(0.4);
+    expect(runner.game.c.limbs[limb].attached, `${holdId} 上没挂满 5 秒`).toBe(true);
+    return before - runner.game.c.limbs[limb].stamina;
+  }
+
+  it("反提 u1：挂得住 5s，耗力不超过同站位正拉点的 2.5 倍（旧模型直接爆耗）", () => {
+    const control = drainOver5s("LH", "h4l"); // 同站位的普通正拉点
+    const under = drainOver5s("RH", "u1");
+    expect(under).toBeLessThan(control * 2.5);
+  });
+
+  it("反提要靠脚顶髋：动作被判为 undercling", () => {
+    const runner = climbToDirectionStance();
+    move(runner, "RH", "u1");
+    expect(runner.game.c.limbs.RH.move).toBe("undercling");
+  });
+
+  it("反肩比反提更贵（肩部对抗），但仍挂得住", () => {
+    expect(drainOver5s("LH", "g1")).toBeGreaterThan(drainOver5s("RH", "u1"));
   });
 });

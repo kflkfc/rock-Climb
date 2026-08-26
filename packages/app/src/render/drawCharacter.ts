@@ -10,6 +10,7 @@ import { Vec2 } from "@kkc/core/math/vec2.ts";
 import { Pose, Limb } from "@kkc/core/model/skeleton.ts";
 import { Game } from "@kkc/core/sim/gameState.ts";
 import { GripMethod } from "@kkc/core/sim/grip.ts";
+import { HOLD_META } from "@kkc/core/sim/holds.ts";
 import { characterById, CharacterDef } from "@kkc/core/model/characters.ts";
 
 type Skin = CharacterDef["skin"];
@@ -210,7 +211,9 @@ function drawTorso(
 
 /**
  * 画手指：局部坐标，+x = 手指伸向(前臂续向岩点)方向。按抓法摆姿。
- * open 平摊舒展 / half 半扣(指节弯) / full 全扣(强弯+拇指压) / pinch 拇指对四指。
+ * open 平摊舒展 / half 半扣(指节弯) / full 全扣(强弯+拇指压) / lock 扣指洞(按指数伸)
+ * / pinch 拇指对四指。
+ * @param fingers 指洞能塞几根手指（0=不是指洞）
  */
 function drawFingers(
   ctx: CanvasRenderingContext2D,
@@ -218,6 +221,7 @@ function drawFingers(
   sc: number,
   main: string,
   dark: string,
+  fingers = 0,
 ) {
   ctx.strokeStyle = main;
   ctx.fillStyle = main;
@@ -262,6 +266,19 @@ function drawFingers(
     );
     ctx.strokeStyle = dark;
     drawFinger(0.9, [{ len: 6, turn: 0 }, { len: 4, turn: -1.7 }]); // 拇指压
+  } else if (grip === "lock") {
+    // 扣指洞：**只有能塞进去的那几根手指**伸进洞里，其余蜷在洞外——
+    // 大指洞 3 指 / 中指洞 2 指 / 最小指洞 1 指，一眼看出这是几指洞。
+    const inCount = fingers > 0 ? fingers : 3;
+    const spread = inCount === 1 ? [0] : inCount === 2 ? [-0.13, 0.13] : [-0.26, 0, 0.26];
+    spread.forEach((a) => drawFinger(a, [{ len: 9, turn: 0 }, { len: 3, turn: 1.1 }]));
+    // 塞不进去的手指蜷在洞外
+    for (let k = inCount; k < 4; k++) {
+      const a = 0.55 + (k - inCount) * 0.28;
+      drawFinger(a, [{ len: 4, turn: 0 }, { len: 3.5, turn: 2.0 }]);
+    }
+    ctx.strokeStyle = dark;
+    drawFinger(1.5, [{ len: 5, turn: 0 }, { len: 3, turn: -1.2 }]); // 拇指抵在洞缘
   } else {
     // pinch 捏：拇指在一侧、四指在另一侧，相向夹
     ctx.lineWidth = fw;
@@ -271,7 +288,10 @@ function drawFingers(
   }
 }
 
-/** 攀岩鞋：局部坐标，+x = 脚尖(小腿续向)方向。内侧踩=尖头点立 / 抹脚=平贴大底。 */
+/**
+ * 攀岩鞋：局部坐标，+x = 脚尖(小腿续向)方向。
+ * 内侧踩=大脚趾侧尖头点立 / 外侧踩=翻到小脚趾侧（背步的样子）/ 抹脚=平贴大底。
+ */
 function drawShoe(
   ctx: CanvasRenderingContext2D,
   grip: GripMethod | null,
@@ -294,6 +314,9 @@ function drawShoe(
     ctx.fill();
   } else {
     // 内侧踩(默认)：下翻尖头，脚尖点立、鞋身较窄
+    // 外侧踩：整只鞋上下翻面（小脚趾侧着点）——背步/垂膝一眼可辨
+    ctx.save();
+    if (grip === "outside") ctx.scale(1, -1);
     ctx.beginPath();
     ctx.moveTo(11 * sc, 1 * sc); // 尖头(接触点)
     ctx.quadraticCurveTo(6 * sc, -5 * sc, -6 * sc, -3.5 * sc); // 鞋背
@@ -306,6 +329,7 @@ function drawShoe(
     ctx.beginPath();
     ctx.ellipse(-1 * sc, -1.5 * sc, 5 * sc, 2 * sc, -0.2, 0, Math.PI * 2);
     ctx.fill();
+    ctx.restore();
   }
 }
 
@@ -984,7 +1008,15 @@ export function drawCharacter(ctx: CanvasRenderingContext2D, cam: Camera, pose: 
     ctx.save();
     ctx.translate(e.x, e.y);
     ctx.rotate(ang);
-    drawFingers(ctx, game.c.limbs[l].grip, sc, isAnimal(skinId) ? pal.furLight! : pal.skin, pal.skinDk);
+    const ht = game.c.limbs[l].hold?.type;
+    drawFingers(
+      ctx,
+      game.c.limbs[l].grip,
+      sc,
+      isAnimal(skinId) ? pal.furLight! : pal.skin,
+      pal.skinDk,
+      ht ? (HOLD_META[ht].pocketFingers ?? 0) : 0,
+    );
     ctx.restore();
   }
 }

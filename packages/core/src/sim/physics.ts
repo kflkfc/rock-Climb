@@ -34,12 +34,14 @@ import {
   Pose,
   Orientation,
 } from "../model/skeleton.ts";
-import { Hold, effectiveFriction } from "./holds.ts";
+import { Hold, effectiveFriction, MoveType, MOVE_META } from "./holds.ts";
 import {
   GripMethod,
   gripTypeScore,
   contactAreaScore,
   directionalFit,
+  moveAlignHand,
+  classifyMove,
   isPullingFootGrip,
 } from "./grip.ts";
 import { GRIP_DRAIN_MUL } from "./gripTable.ts";
@@ -58,6 +60,8 @@ export interface LimbState {
   contactOff: Vec2;
   stamina: number; // 0..1
   align: number; // 每帧实时方向对齐度 0..1（受力方向落在岩点锥内程度）
+  /** 每帧派生的动作类型（正拉/侧拉/反提/反肩）——由朝向×身体位置算出，非岩点属性 */
+  move: MoveType;
   /** 当末端自由时，把手的当前世界位置（被拖动 / 弹回） */
   freePos: Vec2;
   slipping: boolean; // 本帧是否因过载/耗尽而脱手（供特效）
@@ -166,7 +170,52 @@ export function gravitySigned(wallAngleDeg: number): {
  *  - 取平均得自然攀爬站姿；平滑跟随 → 移动肢端到更高岩点并抓住后，
  *    骨盆随之上移，重心真正上升，可以一步步爬上去。
  *  - 最后硬钳制：任何抓住肢端不得超过伸展极限（必须先把低处肢端也挪上来）。
+ *
+ * 两处方向感知（本版新增）：
+ *  ① 手的悬挂量随**岩点朝向**缩放。以前所有手一律"吊在岩点下方一臂长"，
+ *    于是反提点（要求向上受力）也把身体拽到点下方 → 受力方向与岩点要求
+ *    差 180° → 抓力塌陷、耐力爆耗。现在朝下的点保持满悬挂（行为等价），
+ *    朝上的点收到 hangDirK（肩与岩点齐平，才够得着往上提）。
+ *  ② 脚的支撑量随**脚法**变化：挂脚(脚跟钩)髋靠向岩点、膝深弯；
+ *    勾脚(脚尖钩)腿接近伸直且不把身体顶到脚上方。
  */
+/**
+ * 悬挂量缩放：岩点朝向与"沿墙向下"的一致程度 → 1（正拉，满悬挂，行为同旧版）
+ * …… → hangDirK（反提，肩与岩点齐平）。侧向点落在中间。
+ */
+export function hangDirFactor(pullDir: number, down: Vec2, t: Tuning): number {
+  const align = dcos(pullDir) * down.x + dsin(pullDir) * down.y; // -1..1
+  return t.hangDirK + (1 - t.hangDirK) * (0.5 + 0.5 * align);
+}
+
+/** 脚对骨盆的支撑比例：挂脚坐在点上（髋近、膝深弯）/ 勾脚腿直 / 其余标准站姿 */
+function standFracFor(grip: GripMethod | null, t: Tuning): number {
+  if (grip === "heel") return t.heelSitFrac;
+  if (grip === "toe") return t.toeStraightFrac;
+  return t.standFrac;
+}
+
+/**
+ * 内侧踩 / 外侧踩的姿态增益。
+ * 外侧踩（小脚趾侧）= 背步/垂膝：髋要朝这只脚一侧扭过去，把身体贴进墙，
+ * 墙越仰（perpPull↑）越吃香；内侧踩（大脚趾侧）则在身体方正时最有力。
+ * 两者因此各有主场，而不是外侧一律更差。
+ */
+function edgeStanceBoost(
+  l: Limb,
+  grip: GripMethod | null,
+  hipTwist: number,
+  perpPull: number,
+  t: Tuning,
+): number {
+  if (grip !== "inside" && grip !== "outside") return 1;
+  // hipTwist > 0 视为髋朝右转；右脚外侧踩与之同向
+  const side = l === "RF" ? 1 : -1;
+  const twistToward = Math.max(-1, Math.min(1, hipTwist * side * 2.5));
+  if (grip === "outside") return 1 + t.outsideEdgeK * Math.max(0, twistToward) * (0.35 + perpPull);
+  return 1 + t.outsideEdgeK * 0.6 * Math.max(0, -twistToward); // 内侧踩：身体方正/反向转髋时占优
+}
+
 function solvePelvis(c: Climber, dt: number, t: Tuning) {
   const up = rotate({ x: 0, y: -1 }, c.lean); // 攀爬向上
   const down = scale(up, -1); // 沿墙向下（重力）
@@ -189,10 +238,14 @@ function solvePelvis(c: Climber, dt: number, t: Tuning) {
     const pos = attached ? gripPos(st) : st.freePos;
     let contrib: Vec2;
     if (isHand(l)) {
-      const shoulderTgt = add(pos, scale(down, armReach(c.body) * hangF));
+      // ①朝向感知：岩点越"朝上"（反提），悬挂量越小 —— 身体不再被拽到点下方
+      const hangK = attached ? hangDirFactor(st.hold!.pullDir, down, t) : 1;
+      const shoulderTgt = add(pos, scale(down, armReach(c.body) * hangF * hangK));
       contrib = add(shoulderTgt, torsoDown);
     } else {
-      contrib = add(pos, scale(up, legReach(c.body) * t.standFrac));
+      // ②脚法感知：挂脚坐深、勾脚伸直、其余站姿
+      const standK = attached ? standFracFor(st.grip, t) : t.standFrac;
+      contrib = add(pos, scale(up, legReach(c.body) * standK));
     }
     tgt = add(tgt, scale(contrib, w));
     wsum += w;
@@ -506,6 +559,10 @@ export function stepClimber(
   const totalLoad = Fpara + Fperp * 0.6;
 
   const com = c.pose.com;
+  // 沿墙向下（重力沿墙分量的方向）：动作判定的基准轴——设计者说"这颗点朝上"
+  // 指的就是相对这条轴，而不是相对某一瞬间的身体位置。
+  // up = rotate((0,-1), lean) = (sin, -cos) ⇒ down = (-sin, cos)
+  const wallDown = datan2(dcos(c.lean), -dsin(c.lean));
 
   // 第一遍：拉型肢端（手 / 勾脚 / 挂脚）的受力角——张力对抗判定用
   const pullAngles: Partial<Record<Limb, number>> = {};
@@ -526,15 +583,35 @@ export function stepClimber(
     if (!comInside) load *= 1 + t.imbalanceDrain * (1.2 - c.body.coreStability);
 
     // 方向对齐（每帧实时）：手悬向重心 / 脚撑离重心 的受力轴 vs 岩点可用方向锥。
-    // 勾脚/挂脚是"拉"型脚法 → 按手的语义（把身体拉向岩点），仰角/屋檐的关键。
+    // 挂脚/勾脚是"拉"型脚法 → 按手的语义（把身体拉向岩点），仰角/屋檐的关键。
     // 身体（重心）位置/旋转改变受力轴 → 错向则 align 低 → 抓力骤降、耐力急耗。
     const gp = gripPos(st);
     const pulls = isHand(l) || isPullingFootGrip(st.grip);
     const loadAngle = pulls
       ? datan2(com.y - gp.y, com.x - gp.x)
       : datan2(gp.y - com.y, gp.x - com.x);
-    const align = directionalFit(loadAngle, hold.pullDir, hold.pullTol);
+    // 拉型肢端走**双瓣**响应：反提(≈180°)是真实可做的动作，不该一路衰减到底；
+    // 但它靠顶髋，脚全飞就塌。撑型（脚站/抹）仍是单瓣。
+    let move: MoveType = "downpull";
+    let align: number;
+    if (pulls) {
+      // 朝向的水平分量指向身体 → 侧拉；背离身体 → 反肩（同一颗点，身位决定动作）
+      const towardBody = dcos(hold.pullDir) * (com.x - gp.x) >= 0;
+      move = classifyMove(hold.pullDir, wallDown, towardBody);
+      align = moveAlignHand(
+        move,
+        loadAngle,
+        hold.pullDir,
+        hold.pullTol,
+        footCount > 0,
+        att.length >= 3,
+        t,
+      );
+    } else {
+      align = directionalFit(loadAngle, hold.pullDir, hold.pullTol);
+    }
     st.align = align;
+    st.move = move;
     const alignEff = dpow(align, t.dirPenalty);
 
     // 接触覆盖率（松手不吸附的代价面）：抓在岩点边缘 → 覆盖率低 → 耐力急耗
@@ -569,7 +646,11 @@ export function stepClimber(
       1 + t.tensionBoost * oppose * perpPull * (0.5 + 0.5 * c.body.coreStability);
     // 板墙脚摩擦增益：压入分量 × 有效摩擦 → 脚下如有神（抹脚在板墙上的意义）
     const slabBoost = !isHand(l) ? 1 + perpPress * 0.8 * effectiveFriction(hold) : 1;
-    const effMax = maxForce * (0.3 + 0.7 * alignEff) * tensionRelief * slabBoost;
+    // 内侧踩 vs 外侧踩：不再是"外侧一律更差"，而是各有主场——
+    // 外侧踩＝背步/垂膝，要把髋转向该脚一侧，墙越仰收益越大；
+    // 内侧踩则在身体方正（不转髋）时占优。
+    const edgeBoost = edgeStanceBoost(l, st.grip, c.hipTwist, perpPull, t);
+    const effMax = maxForce * (0.3 + 0.7 * alignEff) * tensionRelief * slabBoost * edgeBoost;
     const tension = oppose * 30 * t.tensionCost * (1.2 - c.body.coreStability);
 
     // 耐力消耗 = 负载×指力需求 ÷ 实时匹配度 × (1/指力) + 张力开销，
@@ -581,6 +662,7 @@ export function stepClimber(
         t.staminaDrain +
         tension) *
       hold.drainMul *
+      MOVE_META[move].drainMul *
       GRIP_DRAIN_MUL[st.grip!] *
       contactMul *
       (1.25 - 0.5 * c.body.endurance) *

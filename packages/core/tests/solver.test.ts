@@ -34,10 +34,12 @@ describe("AI 试解器 · 难度特征", () => {
     expect(v9.features.maxWallAngle).toBeGreaterThan(v1.features.maxWallAngle);
   });
 
-  it("minMatch 反映指力需求：全 Jug 线 > Sloper 线", () => {
-    const v1 = solveLevel(LEVELS[0]);
+  it("minMatch 反映指力需求：全 Jug 线 > 有小棱/滑面的线", () => {
+    // 拿真·全 Jug 的教学线 t2 做对照——v1 自己就含 crimp 与 sloper，
+    // 用它当"全 Jug 线"只是巧合成立，脚法放开后最差点换了个位置就翻车了。
+    const pureJug = solveLevel(LEVELS.find((l) => l.id === "t2")!);
     const v8 = solveLevel(LEVELS[7]); // 摩擦线（Sloper 为主）
-    expect(v1.features.minMatch).toBeGreaterThan(v8.features.minMatch);
+    expect(pureJug.features.minMatch).toBeGreaterThan(v8.features.minMatch);
   });
 
   it("路径合法：每步引用存在的岩点，终步为 goal", () => {

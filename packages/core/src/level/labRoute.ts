@@ -3,12 +3,12 @@
 // 用途：人工试玩验证四个待修议题（不是正式内容，不参与星级定标/黄金回放/AI 出厂检验）：
 //   ① 内侧踩 vs 外侧踩：Z1 板墙段（内侧该占优）对照 Z3 仰角段 f5r 外偏脚点（外侧/背步该占优）
 //   ② 挂脚(脚跟·膝盖弯) / 勾脚(脚尖·腿直)：Z3 仰角段 f5l 近身、f5r 外偏两颗大水罐
-//   ③ 方向：主线 h3 侧拉对抗（现版本尚可）+ 旁挂 g1 反肩 / u1 反提（现版本必脱/爆耗）
-//   ④ 指洞：h1l 大指洞(pocket 3 指) / h2l 最小指洞(mono 1 指)；
-//      中指洞待 pocket2 类型上线后替换 h2r（现暂为 pocket）
+//   ③ 方向/动作：主线 h3 侧拉对抗 + 旁挂 g1 反肩 / u1 反提。
+//      这三者都是**动作**不是岩点类型——同为竖条 edge，靠 pullDirDeg 与身体位置区分。
+//   ④ 指洞三档：h1l 大指洞(3 指) / h2r 中指洞(2 指) / h2l 最小指洞(1 指)
 //
-// 布局：手脚分轨——pocket/pinch/sidepull/undercling/gaston/mono 仅手、footchip 仅脚，
-// 单轨共用的 buildRoute 表达不了，故手工排点：手轨恒在同序脚轨上方 105~130。
+// 布局：手脚分轨——脚现在哪儿都能踩，但指洞/捏点踩起来很差且一次只容一只肢端，
+// 单轨共用的 buildRoute 表达不了这种分工，故手工排点：手轨恒在同序脚轨上方 105~130。
 // 每档左右各一点：L 点 x<360 给 LH/LF，R 点 x>360 给 RH/RF。
 // 三颗"旁挂诊断点"(g1/u1/c1) 不在主线上：站稳后伸手即可试，脱手也不挡通关。
 //
@@ -45,13 +45,14 @@ const HOLDS: HoldDef[] = [
   { id: "c1", type: "crimp", x: 252, y: 615 },
 
   { id: "h2l", type: "mono", x: 306, y: HY[2] }, // 最小指洞（1 指）
-  { id: "h2r", type: "pocket", x: 424, y: HY[2] }, // ⚠ 中指洞占位：pocket2 上线后改此点
+  { id: "h2r", type: "pocket2", x: 424, y: HY[2] }, // 中指洞（2 指）
   { id: "f3l", type: "volume", x: 306, y: FY[3], radius: 40 },
   { id: "f3r", type: "edge", x: 424, y: FY[3] },
 
   // ---- Z3 仰角 108° 起（方向区：侧拉对抗 → 反肩 + 反提）----
-  { id: "h3l", type: "sidepull", x: 300, y: HY[3], pullDirDeg: 0 }, // 左点向右拉
-  { id: "h3r", type: "sidepull", x: 420, y: HY[3], pullDirDeg: 180 }, // 右点向左拉（对抗）
+  // 侧拉不是岩点类型而是动作：竖条(edge)转成横向受力，够到时自然判成侧拉
+  { id: "h3l", type: "edge", x: 300, y: HY[3], pullDirDeg: 0 }, // 左点向右拉
+  { id: "h3r", type: "edge", x: 420, y: HY[3], pullDirDeg: 180 }, // 右点向左拉（对抗）
   { id: "f4l", type: "edge", x: 298, y: FY[4] },
   { id: "f4r", type: "crimp", x: 430, y: FY[4] },
 
@@ -60,8 +61,8 @@ const HOLDS: HoldDef[] = [
   { id: "h4r", type: "jug", x: 418, y: HY[4], radius: 20 },
   // ★ 旁挂诊断点：站稳主线 h4/f4 后左右伸手即可够到，脱手也不影响继续上攀。
   //   现版本这两点几乎必脱（受力方向与身体位置矛盾），修好后应能稳定悬挂数秒。
-  { id: "g1", type: "gaston", x: 248, y: 430 }, // 反肩：左手向外(左)撑，略高于肩
-  { id: "u1", type: "undercling", x: 472, y: 480 }, // 反提：右手在肩下向上提
+  { id: "g1", type: "edge", x: 248, y: 430, pullDirDeg: 180 }, // 朝外：左手够到 → 判成反肩
+  { id: "u1", type: "edge", x: 472, y: 480, pullDirDeg: -90 }, // 朝上：右手在肩下 → 判成反提
 
   // 脚点：左近身大水罐（挂脚/脚跟位）、右外偏大水罐（勾脚 + 外侧踩背步位）
   { id: "f5l", type: "jug", x: 302, y: FY[5], radius: 22 },

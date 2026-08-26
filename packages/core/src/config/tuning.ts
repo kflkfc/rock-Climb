@@ -37,6 +37,16 @@ export interface Tuning {
   limbFootR: number; // 脚占位半径（世界单位）
   overlapMax: number; // 肢端互相重叠比例上限（超过 → 后来者抓不住）
   contactDrainK: number; // 覆盖率不足的耐力急耗强度（0=关闭）
+  // 按动作分档的对齐上限（手）：反提/侧拉/反肩都是真实可做的动作，不是"错向"
+  backLobe: number; // 反提上限（有脚受力时）
+  backNoFeet: number; // 反提上限（脚全飞时）——脚一走反提就崩
+  alignSide: number; // 侧拉上限
+  alignGaston: number; // 反肩上限（无对侧支撑再打 0.55 折）
+  // 方向感知的骨盆求解：正拉点满悬挂，反提点肩与岩点齐平才够得着往上提
+  hangDirK: number; // 悬挂系数随朝向缩放的下限（0=反提点完全不悬挂，1=退回旧行为）
+  heelSitFrac: number; // 挂脚(脚跟钩)：髋靠向岩点、膝深弯——"坐在点上"
+  toeStraightFrac: number; // 勾脚(脚尖钩)：腿接近伸直
+  outsideEdgeK: number; // 外侧踩的转髋×仰角加成上限（背步/垂膝的价值）
 }
 
 export const tuning: Tuning = {
@@ -73,6 +83,14 @@ export const tuning: Tuning = {
   limbFootR: 7,
   overlapMax: 0.3,
   contactDrainK: 2.5,
+  backLobe: 0.8,
+  backNoFeet: 0.15,
+  alignSide: 0.78,
+  alignGaston: 0.62,
+  hangDirK: 0.25,
+  heelSitFrac: 0.5,
+  toeStraightFrac: 0.96,
+  outsideEdgeK: 0.35,
 };
 
 export interface TuneSpec {
@@ -115,4 +133,12 @@ export const TUNE_SPECS: TuneSpec[] = [
   { key: "limbFootR", label: "脚占位半径", min: 3, max: 14, step: 1 },
   { key: "overlapMax", label: "重叠上限", min: 0, max: 1, step: 0.05 },
   { key: "contactDrainK", label: "浅抓急耗", min: 0, max: 8, step: 0.25 },
+  { key: "backLobe", label: "反提上限", min: 0.2, max: 1, step: 0.02 },
+  { key: "backNoFeet", label: "反提无脚", min: 0.05, max: 0.6, step: 0.01 },
+  { key: "alignSide", label: "侧拉上限", min: 0.2, max: 1, step: 0.02 },
+  { key: "alignGaston", label: "反肩上限", min: 0.2, max: 1, step: 0.02 },
+  { key: "hangDirK", label: "反提悬挂", min: 0, max: 1, step: 0.05 },
+  { key: "heelSitFrac", label: "挂脚坐深", min: 0.2, max: 0.9, step: 0.02 },
+  { key: "toeStraightFrac", label: "勾脚伸直", min: 0.6, max: 1.05, step: 0.02 },
+  { key: "outsideEdgeK", label: "外侧踩增益", min: 0, max: 1, step: 0.05 },
 ];

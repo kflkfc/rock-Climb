@@ -30,10 +30,10 @@ describe("匹配度公式 (V4 灵魂)", () => {
     expect(half).toBeGreaterThan(open);
     expect(half).toBeGreaterThan(0.8);
   });
-  it("朝向不匹配 → 匹配度显著下降", () => {
+  it("横向剪切最差：侧向受力的匹配度显著低于顺向", () => {
     const good = matchPercent({ hold: crimp, grip: "half", distToCenter: 2, pullRad: Math.PI / 2 });
-    const bad = matchPercent({ hold: crimp, grip: "half", distToCenter: 2, pullRad: -Math.PI / 2 });
-    expect(bad).toBeLessThan(good * 0.6);
+    const shear = matchPercent({ hold: crimp, grip: "half", distToCenter: 2, pullRad: 0 });
+    expect(shear).toBeLessThan(good * 0.6);
   });
   it("接触点离中心越远匹配度越低", () => {
     const near = matchPercent({ hold: crimp, grip: "half", distToCenter: 1, pullRad: Math.PI / 2 });
@@ -46,9 +46,14 @@ describe("匹配度公式 (V4 灵魂)", () => {
       expect(opts[i - 1].match).toBeGreaterThanOrEqual(opts[i].match);
     expect(opts.find((o) => o.grip === "full")!.injury).toBe(true);
   });
-  it("orientationScore：同向=1，反向≈0.1", () => {
-    expect(orientationScore(1, 1)).toBeCloseTo(1, 5);
-    expect(orientationScore(0, Math.PI)).toBeCloseTo(0.1, 5);
+  it("orientationScore 是双瓣：顺向=1 > 反向(反提) > 横向剪切(谷底)", () => {
+    const same = orientationScore(1, 1);
+    const back = orientationScore(0, Math.PI); // 反提：反着自然吊挂线发力
+    const shear = orientationScore(0, Math.PI / 2); // 侧拉/反肩：横向剪切
+    expect(same).toBeCloseTo(1, 5);
+    expect(back).toBeGreaterThan(shear); // 反提真人做得到，不该比横向还差
+    expect(back).toBeLessThan(same); // 但仍比顺拉费劲
+    expect(shear).toBeCloseTo(0.45, 2);
   });
 });
 

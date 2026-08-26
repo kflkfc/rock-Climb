@@ -8,6 +8,7 @@ import { SLAB_LEVELS, SLAB_SEQS } from "./slabGym.ts";
 import { MIXED_LEVELS, MIXED_SEQS } from "./mixedGym.ts";
 import { ROOF_LEVELS, ROOF_SEQS } from "./roofGym.ts";
 import { LAB_LEVEL, LAB_SEQ } from "./labRoute.ts";
+import { LAB_ARCH_LEVEL, LAB_ARCH_SEQ } from "./labArch.ts";
 import { GYMS } from "./gyms.ts";
 
 // ---- V1 KLIFR：基本垂直，15 点 ----
@@ -155,7 +156,6 @@ const V9 = buildRoute({
   bias: 0.3,
   holdType: (i) => {
     // 中段对抗区：左侧点向右拉(0°)、右侧点向左拉(180°)——双手侧拉对抗（张力线灵魂）。
-    // 用 edge+侧向朝向而非 sidepull 类型：单轨路线脚要踩同一批点（sidepull 仅手）。
     if (i >= 6 && i <= 9) {
       return { type: "edge", pullDirDeg: i % 2 === 0 ? 0 : 180, pullTolDeg: 60, radius: 18 };
     }
@@ -246,6 +246,7 @@ export const LEVELS: LevelDef[] = [
   ...MIXED_LEVELS, // index 27-30
   ...ROOF_LEVELS, // index 31-37
   LAB_LEVEL, // index 38（实验室诊断线，非正式内容）
+  LAB_ARCH_LEVEL, // index 39（实验室诊断线 · 拱形上下攀）
 ].map((lv) => ({
   ...lv,
   ...(CALIBRATED[lv.id] ? { stars: CALIBRATED[lv.id] } : {}),
@@ -258,7 +259,7 @@ export const LEVELS: LevelDef[] = [
  *      ②静态试解器与 solvePelvis 共用同一套方向近似，正是它要诊断的东西。
  * 可通关性由 tests/labRoute.test.ts 用真引擎跑参考序列保证（比静态解更强）。
  */
-export const LAB_LEVEL_IDS: ReadonlySet<string> = new Set(["x1"]);
+export const LAB_LEVEL_IDS: ReadonlySet<string> = new Set(["x1", "x2"]);
 
 /** 出厂检验/黄金回放覆盖的正式关卡 */
 export const OFFICIAL_LEVELS: LevelDef[] = LEVELS.filter((l) => !LAB_LEVEL_IDS.has(l.id));
@@ -277,4 +278,5 @@ export const LEVEL_SEQS: Record<string, [Limb, string][]> = {
   ...MIXED_SEQS,
   ...ROOF_SEQS,
   x1: LAB_SEQ,
+  x2: LAB_ARCH_SEQ,
 };

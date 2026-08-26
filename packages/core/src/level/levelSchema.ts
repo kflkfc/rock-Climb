@@ -13,6 +13,8 @@ export interface HoldDef {
   pullDirDeg?: number; // 朝向：最佳受力方向（度，90=向下拉，0=右，-90=上，180=左）
   pullTolDeg?: number; // 受力锥半角（度）；不填用该形状默认
   material?: HoldMaterial; // 表面材质：grippy 磨砂 / normal / slick 光滑（默认 normal）
+  /** 定线色（CSS hex，如 "#D64A47"）。缺省 = 按类型取 HOLD_COLOR。纯视觉，不进物理/哈希 */
+  color?: string;
   onVolume?: string; // 所在体积块 id（渲染层级归属）
   goal?: boolean; // 终点岩点（彩虹标识）
   start?: Limb; // 起始时该肢端预置于此

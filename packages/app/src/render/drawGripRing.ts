@@ -4,6 +4,7 @@
 import { Camera } from "./camera.ts";
 import { Game, RingState } from "@kkc/core/sim/gameState.ts";
 import { GripOption, GRIP_LABEL } from "@kkc/core/sim/grip.ts";
+import { MOVE_META } from "@kkc/core/sim/holds.ts";
 import { Vec2 } from "@kkc/core/math/vec2.ts";
 
 export interface RingSlot {
@@ -59,6 +60,23 @@ export function drawGripRing(ctx: CanvasRenderingContext2D, cam: Camera, game: G
   ctx.strokeStyle = "#F5EBD3";
   ctx.lineWidth = 3;
   ctx.stroke();
+
+  // 动作标注：这一手是正拉/侧拉/反提/反肩——动作不是岩点属性，是朝向×身体位置的结果，
+  // 同一颗点换个身位就换动作，所以只能在这里现算现标。
+  {
+    const m = MOVE_META[game.ring.move];
+    const y = center.y + game.ring.hold.radius * cam.scale + 20;
+    ctx.font = "700 13px system-ui, sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    const w = ctx.measureText(m.label).width + 16;
+    ctx.fillStyle = "rgba(43,57,51,0.88)";
+    ctx.beginPath();
+    ctx.roundRect(center.x - w / 2, y - 10, w, 20, 6);
+    ctx.fill();
+    ctx.fillStyle = game.ring.move === "downpull" ? "#CFE3D2" : "#E5A636";
+    ctx.fillText(m.label, center.x, y);
+  }
 
   for (const slot of ringLayout(cam, game.ring)) {
     const { opt, c, r } = slot;

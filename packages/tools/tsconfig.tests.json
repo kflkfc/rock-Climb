@@ -1,0 +1,14 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    // 测试跑在 Node（vitest）；src 里有 DOM 代码，所以 lib 仍带 DOM
+    "lib": ["ES2020", "DOM", "DOM.Iterable"],
+    "types": ["node"],
+    "baseUrl": "../..",
+    "paths": {
+      "@kkc/core/*": ["packages/core/src/*"],
+      "@kkc/app/*": ["packages/app/src/*"]
+    }
+  },
+  "include": ["src", "tests"]
+}

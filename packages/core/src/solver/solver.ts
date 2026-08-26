@@ -11,9 +11,9 @@
 // solvable=true ≈ 存在合理路径；最终以 seqFollower/真人试玩复核 crux 关卡。
 
 import { LevelDef, wallAngleAtY } from "../level/levelSchema.ts";
-import { Hold, makeHold, holdUsableBy } from "../sim/holds.ts";
+import { Hold, makeHold, holdUsableBy, isPocket } from "../sim/holds.ts";
 import { gripOptions } from "../sim/grip.ts";
-import { gravitySigned, reachSlackOf } from "../sim/physics.ts";
+import { gravitySigned, reachSlackOf, hangDirFactor } from "../sim/physics.ts";
 import { limbRadiusOf, discOverlapRatio } from "../sim/contact.ts";
 import { Limb, LIMBS, isHand, resolvePose, desiredBend, maxReachOf } from "../model/skeleton.ts";
 import { BodyParams, makeBody, abilitiesForLevel, armReach, legReach } from "../model/body.ts";
@@ -72,8 +72,20 @@ function estimatePose(level: LevelDef, body: BodyParams, holdOf: Map<string, Hol
   for (const l of LIMBS) {
     const pos = holdOf.get(a[l])!.pos;
     const w = isHand(l) ? 0.85 : 0.8;
+    // 与 solvePelvis 同步：手的悬挂量随岩点朝向缩放（反提点身体不被拽到点下方）
     const contrib = isHand(l)
-      ? add(add(pos, scale(down, armReach(body) * tuning.hangFrac)), torsoDown)
+      ? add(
+          add(
+            pos,
+            scale(
+              down,
+              armReach(body) *
+                tuning.hangFrac *
+                hangDirFactor(holdOf.get(a[l])!.pullDir, down, tuning),
+            ),
+          ),
+          torsoDown,
+        )
       : add(pos, scale(up, legReach(body) * tuning.standFrac));
     tgt = add(tgt, scale(contrib, w));
     wsum += w;
@@ -112,6 +124,9 @@ function feasible(
     for (let j = i + 1; j < LIMBS.length; j++) {
       const ha = holdOf.get(a[LIMBS[i]])!;
       const hb = holdOf.get(a[LIMBS[j]])!;
+      // 指洞独占：同一个洞不能塞两只肢端（与 gameState.overlapBlocked 同一规则，
+      // 否则官方关会被误判可解）
+      if (ha.id === hb.id && isPocket(ha.type)) return false;
       const maxSep = dist(ha.pos, hb.pos) + ha.radius + hb.radius;
       const ra = limbRadiusOf(LIMBS[i], tuning);
       const rb = limbRadiusOf(LIMBS[j], tuning);

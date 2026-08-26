@@ -17,7 +17,8 @@ const R2 = buildRoute({
   rail: [{ x: 330, y: 850 }, { x: 390, y: 200 }],
   n: 13, zig: 30,
   holdType: (i) => {
-    if (i >= 5 && i % 3 === 1) return { type: "undercling", pullDirDeg: -90, pullTolDeg: 60 };
+    // 反提是动作不是类型：朝上受力的棱，手从下方够到时自然判成反提
+    if (i >= 5 && i % 3 === 1) return { type: "edge", pullDirDeg: -90, pullTolDeg: 60 };
     return {};
   },
 });

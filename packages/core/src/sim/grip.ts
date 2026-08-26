@@ -7,7 +7,8 @@
 // 全扣(full crimp) 对 Crimp 匹配度高但有伤害风险（养成系统反向激励，切片仅标记）。
 
 import { clamp } from "../math/vec2.ts";
-import { Hold, HoldType } from "./holds.ts";
+import { dcos } from "../math/dmath.ts";
+import { Hold, HoldType, MoveType, isPocket } from "./holds.ts";
 import { Limb, isHand } from "../model/skeleton.ts";
 import { HAND_TABLE, FOOT_TABLE } from "./gripTable.ts";
 import { gripUnlocked } from "../progress/techTree.ts";
@@ -30,8 +31,10 @@ export const GRIP_LABEL: Record<GripMethod, string> = {
   inside: "内侧踩",
   outside: "外侧踩",
   smear: "抹脚",
-  heel: "勾脚",
-  toe: "挂脚",
+  // 脚跟钩 = 膝盖弯、人像坐在点上 → 挂脚；脚尖钩 = 腿基本伸直 → 勾脚。
+  // （只是显示文案；回放存的是抓法**序号**，改这里不影响兼容。）
+  heel: "挂脚",
+  toe: "勾脚",
 };
 
 /** 是否伤害风险抓法（P2 起接熟练度系统触发指伤 debuff） */
@@ -47,15 +50,12 @@ export function gripsFor(limb: Limb): GripMethod[] {
   return isHand(limb) ? HAND_GRIPS : FOOT_GRIPS;
 }
 
-/** 指洞家族：只有这些岩点真能把手指伸进去（新增指洞档位时加进来） */
-export const POCKET_HOLDS: ReadonlySet<HoldType> = new Set<HoldType>(["pocket", "mono"]);
-
 /**
  * 该抓法在此岩点上是否物理成立——不成立的**不进抓法环**（不是给个低分了事）。
  * "扣指洞"没有洞可扣，在平点/滑面上根本不是一种抓法。
  */
 export function gripApplicable(hold: HoldType, g: GripMethod): boolean {
-  if (g === "lock") return POCKET_HOLDS.has(hold);
+  if (g === "lock") return isPocket(hold);
   return true;
 }
 
@@ -78,19 +78,86 @@ export function angleDiff(a: number, b: number): number {
   return d;
 }
 
-/** 朝向匹配：实际受力方向 vs 岩点最佳受力方向（弧度差）。0..1 */
+/**
+ * 朝向匹配：实际受力方向 vs 岩点最佳受力方向。0..1
+ *
+ * 与 directionalFitHand 同为**双瓣**：顺向（正拉）最好，反向（反提/反肩）次好，
+ * 横向剪切最差。必须和实时物理同形状——否则抓法环显示 57%、抓上去却在融化。
+ */
 export function orientationScore(pullRad: number, holdPullDir: number): number {
-  return clamp(1 - angleDiff(pullRad, holdPullDir) / Math.PI, 0.1, 1); // 反向=0.1，同向=1
+  const c = dcos(angleDiff(pullRad, holdPullDir)); // 1=同向 -1=反向
+  return clamp(0.45 + 0.55 * Math.max(c, -c * 0.6), 0.1, 1);
 }
 
 /**
  * 带容差的方向对齐度（受力锥）：实际受力方向在锥内(≤tol)≈1，
- * 超出锥后线性衰减到 ~0.1。用于每帧判断"身体是否把力施在岩点可用方向上"。
+ * 超出锥后线性衰减到 ~0.1。**单瓣**版本，仅供脚的撑型受力与工具/试解器沿用。
  */
 export function directionalFit(loadAngle: number, pullDir: number, tol: number): number {
   const d = angleDiff(loadAngle, pullDir);
   if (d <= tol) return 1;
   return clamp(1 - ((d - tol) / Math.max(0.001, Math.PI - tol)) * 0.9, 0.1, 1);
+}
+
+/**
+ * 判定这一手在做什么**动作**（派生量，不存进岩点数据）。
+ *
+ * 判据是**岩点朝向相对重力**——设计者就是这么想的："这颗点朝上，那就是反提点"：
+ *  - 朝向≈沿墙向下 → 正拉
+ *  - 朝向≈沿墙向上 → 反提
+ *  - 朝向偏横 → 看这股力是把点**往身上拉**（侧拉）还是**往外撑**（反肩）
+ *
+ * 最后那一档正是"动作不是岩点属性"的证据：同一颗竖条，左手从左边够是反肩，
+ * 右手横过去够就是侧拉。
+ *
+ * @param pullDir    岩点朝向（世界弧度）
+ * @param wallDown   沿墙向下的方向（世界弧度）
+ * @param towardBody 该朝向的水平分量是否指向身体
+ */
+export function classifyMove(pullDir: number, wallDown: number, towardBody: boolean): MoveType {
+  const d = angleDiff(pullDir, wallDown);
+  if (d <= Math.PI / 3) return "downpull"; // ≤60° 朝下
+  if (d >= (Math.PI * 2) / 3) return "undercling"; // ≥120° 朝上
+  return towardBody ? "sidepull" : "gaston";
+}
+
+export interface MoveAlignTune {
+  backLobe: number;
+  backNoFeet: number;
+  alignSide: number;
+  alignGaston: number;
+}
+
+/**
+ * 手的方向对齐度——**按动作分档**，而不是"夹角越大越差"的单调衰减。
+ *
+ * 旧模型只有一条从 0 衰减到 0.1 的曲线，等于宣布"反着自然吊挂线发力不可能"；
+ * 可反提恰恰就是反向发力（点要求向上、身体挂在下方），真人靠屈肘顶髋做得到。
+ * 所以：正拉照旧走受力锥；反提/侧拉/反肩各有自己的上限，再由身体姿态
+ * （geo）在 0.7~1.0 之间微调——位置仍然有影响，但不再是一票否决。
+ *
+ * 前提条件也照现实来：反提没脚顶就崩（feetLoaded），反肩没有对侧支撑撑不住（opposed）。
+ */
+export function moveAlignHand(
+  move: MoveType,
+  natural: number,
+  pullDir: number,
+  tol: number,
+  feetLoaded: boolean,
+  opposed: boolean,
+  t: MoveAlignTune,
+): number {
+  const geo = directionalFit(natural, pullDir, tol); // 0.1..1 身体摆得对不对
+  if (move === "downpull") return geo;
+  const ceil =
+    move === "undercling"
+      ? feetLoaded
+        ? t.backLobe
+        : t.backNoFeet // 脚一飞，反提立刻崩
+      : move === "sidepull"
+        ? t.alignSide
+        : t.alignGaston * (opposed ? 1 : 0.55); // 反肩要对侧顶住
+  return ceil * (0.7 + 0.3 * geo);
 }
 
 /** 甜点加成：接触点极接近中心时的小幅奖励 0..0.15 */

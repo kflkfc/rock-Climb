@@ -8,46 +8,139 @@
       * { margin: 0; padding: 0; box-sizing: border-box; }
       html, body { width: 100%; height: 100%; overflow: hidden; background: #1c1c1c; font: 13px/1.5 system-ui, sans-serif; }
       #root { display: flex; height: 100%; }
-      #stage { flex: 1; display: flex; align-items: center; justify-content: center; position: relative; }
-      canvas { background: #E6D9B5; box-shadow: 0 0 40px rgba(0,0,0,.5); touch-action: none; }
-      #side { width: 300px; background: #2B3933; color: #F5EBD3; padding: 12px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
-      #side h3 { color: #E5A636; font-size: 13px; margin-top: 6px; }
-      #side label { display: flex; justify-content: space-between; align-items: center; gap: 6px; }
-      #side input[type=number] { width: 70px; }
-      #side input[type=range] { flex: 1; }
+      #stage { flex: 1; display: flex; align-items: center; justify-content: center; position: relative; min-width: 0; }
+      canvas { background: #E6D9B5; box-shadow: 0 0 40px rgba(0,0,0,.5); touch-action: none; cursor: crosshair; }
+      #side { width: 328px; flex: 0 0 328px; background: #2B3933; color: #F5EBD3; padding: 10px 12px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; }
+      #side > * { flex: 0 0 auto; } /* 侧栏是纵向 flex：不许子块被挤扁（校验清单最容易中招） */
+      #side h3 { color: #E5A636; font-size: 12px; margin-top: 8px; border-bottom: 1px solid rgba(229,166,54,.25); padding-bottom: 2px; }
+      #side label { display: flex; justify-content: space-between; align-items: center; gap: 6px; min-height: 22px; }
+      #side input[type=number] { width: 68px; }
+      #side input[type=text] { width: 140px; }
+      #side input[type=range] { flex: 1; min-width: 0; }
+      #side input[type=color] { width: 46px; height: 22px; padding: 0; border: 0; background: none; }
       #side select, #side button, #side input, #side textarea { font: inherit; }
-      #side button { padding: 5px 8px; cursor: pointer; background: #D64A47; color: #fff; border: 0; border-radius: 5px; }
+      #side button { padding: 4px 7px; cursor: pointer; background: #D64A47; color: #fff; border: 0; border-radius: 5px; }
+      #side button:disabled { opacity: .4; cursor: default; }
       #side button.alt { background: #5F9A6A; }
       #side button.ghost { background: #4F5F58; }
-      #solveOut { background: rgba(0,0,0,.3); padding: 8px; border-radius: 6px; white-space: pre-wrap; font-family: ui-monospace, monospace; font-size: 12px; min-height: 64px; }
-      #io { width: 100%; height: 90px; font-family: ui-monospace, monospace; font-size: 11px; }
-      .row { display: flex; gap: 6px; }
+      #side .val { min-width: 42px; text-align: right; opacity: .85; font-variant-numeric: tabular-nums; }
+      .row { display: flex; gap: 5px; }
       .row > * { flex: 1; }
-      #mode { position: absolute; top: 10px; left: 10px; background: rgba(43,57,51,.9); color: #E5A636; padding: 4px 10px; border-radius: 6px; font-weight: 700; }
+      .hintText { opacity: .55; font-size: 11px; line-height: 1.45; }
+      #solveOut, #issues { background: rgba(0,0,0,.3); padding: 6px 8px; border-radius: 6px; white-space: pre-wrap; font-size: 11.5px; min-height: 46px; max-height: 190px; overflow-y: auto; }
+      #solveOut { font-family: ui-monospace, monospace; min-height: 46px; }
+      #issues .i { cursor: pointer; padding: 1px 0; }
+      #issues .i:hover { text-decoration: underline; }
+      #issues .err { color: #FF9C99; }
+      #issues .warn { color: #F0C868; }
+      #issues .ok { color: #8BD69B; }
+      #io { width: 100%; height: 84px; font-family: ui-monospace, monospace; font-size: 10.5px; }
+      #swatches { display: flex; flex-wrap: wrap; gap: 3px; }
+      #swatches i { width: 17px; height: 17px; border-radius: 4px; cursor: pointer; border: 1px solid rgba(0,0,0,.35); display: block; }
+      #segList { display: flex; flex-direction: column; gap: 4px; }
+      #segList .seg { display: flex; align-items: center; gap: 4px; background: rgba(0,0,0,.22); padding: 3px 5px; border-radius: 5px; }
+      #segList .seg input[type=number] { width: 52px; }
+      #segList .seg input[type=range] { width: 58px; flex: none; }
+      #segList .seg button { padding: 1px 5px; font-size: 11px; }
+      #mode { position: absolute; top: 10px; left: 10px; background: rgba(43,57,51,.9); color: #E5A636; padding: 4px 10px; border-radius: 6px; font-weight: 700; pointer-events: none; }
+      #coord { position: absolute; bottom: 10px; left: 10px; background: rgba(43,57,51,.85); color: #F5EBD3; padding: 3px 9px; border-radius: 6px; font: 11px ui-monospace, monospace; pointer-events: none; white-space: pre; }
+      #playbar { position: absolute; top: 8px; left: 50%; transform: translateX(-50%); display: none; gap: 6px; align-items: center; background: rgba(43,57,51,.94); padding: 6px 10px; border-radius: 8px; color: #F5EBD3; }
+      #playbar select, #playbar button { font: inherit; }
+      #playbar button { padding: 3px 8px; cursor: pointer; background: #4F5F58; color: #fff; border: 0; border-radius: 5px; }
+      #diag { position: absolute; right: 10px; bottom: 10px; display: none; width: 268px; max-height: 64%; overflow-y: auto; background: rgba(28,34,31,.93); color: #E8E2D2; padding: 8px 10px; border-radius: 8px; font: 11.5px/1.5 ui-monospace, monospace; white-space: pre-wrap; }
+      #diag b { color: #E5A636; font-weight: 700; }
     </style>
   </head>
   <body>
     <div id="root">
-      <div id="stage"><canvas id="cv"></canvas><div id="mode">编辑模式</div></div>
-      <div id="side">
-        <h3>关卡</h3>
-        <label>id <input id="lvId" type="text" style="width:120px" /></label>
-        <label>名称 <input id="lvName" type="text" style="width:120px" /></label>
-        <label>难度 <input id="lvGrade" type="text" style="width:60px" /></label>
-        <label>墙角(底) <input id="wallBase" type="number" step="5" /></label>
-        <label>墙角(顶,空=同底) <input id="wallTop" type="number" step="5" /></label>
-
-        <h3>岩点工具（点空白处放置）</h3>
-        <label>类型 <select id="holdType"></select></label>
-        <div id="sel" style="display:none">
-          <h3>选中岩点 <span id="selId"></span></h3>
-          <label>半径 <input id="hRadius" type="range" min="6" max="50" step="1" /><span id="hRadiusV"></span></label>
-          <label>朝向° <input id="hDir" type="range" min="-180" max="180" step="5" /><span id="hDirV"></span></label>
-          <label>材质 <select id="hMat"><option value="normal">普通</option><option value="grippy">磨砂</option><option value="slick">光滑</option></select></label>
-          <label>起始肢 <select id="hStart"><option value="">无</option><option>LH</option><option>RH</option><option>LF</option><option>RF</option></select></label>
-          <label>终点 <input id="hGoal" type="checkbox" /></label>
-          <button id="delHold">🗑 删除此点 (Del)</button>
+      <div id="stage">
+        <canvas id="cv"></canvas>
+        <div id="mode">编辑模式</div>
+        <div id="coord"></div>
+        <div id="playbar">
+          <label>角色 <select id="pChara"></select></label>
+          <label>Lv <select id="pLevel"></select></label>
+          <label>速度 <select id="pSpeed">
+            <option value="1">1×</option>
+            <option value="0.5">0.5×</option>
+            <option value="0.25">0.25×</option>
+          </select></label>
+          <button id="pPause">⏸</button>
+          <button id="pStep">⏭</button>
+          <button id="pRestart">↻ 重开</button>
+          <button id="pExit">✕ 回编辑 (Esc)</button>
         </div>
+        <div id="diag"></div>
+      </div>
+
+      <div id="side">
+        <h3>草稿</h3>
+        <label>当前 <select id="draftList" style="flex:1;min-width:0"></select></label>
+        <div class="row">
+          <button id="draftNew" class="ghost">➕ 新建</button>
+          <button id="draftDup" class="ghost">⧉ 副本</button>
+          <button id="draftDel" class="ghost">🗑 删除</button>
+        </div>
+
+        <h3>关卡</h3>
+        <label>id <input id="lvId" type="text" /></label>
+        <label>名称 <input id="lvName" type="text" /></label>
+        <label>难度 <input id="lvGrade" type="text" style="width:60px" /></label>
+        <label>世界宽高 <span><input id="lvW" type="number" step="10" /> × <input id="lvH" type="number" step="10" /></span></label>
+        <label>墙面色相 <input id="lvHue" type="range" min="0" max="360" step="1" /><span class="val" id="lvHueV"></span></label>
+        <label>教学提示 <input id="lvHint" type="text" /></label>
+        <label>每肢限动 <input id="lvMoves" type="number" min="0" step="1" placeholder="不限" /></label>
+        <label>★流畅步数 <input id="lvStar" type="number" min="1" step="1" /></label>
+
+        <h3>墙角</h3>
+        <label>模式 <select id="wallMode">
+          <option value="simple">简单（底角/顶角）</option>
+          <option value="segments">分段（多区域）</option>
+        </select></label>
+        <div id="wallSimple">
+          <label>底角° <input id="wallBase" type="number" step="5" /></label>
+          <label>顶角°（空=同底） <input id="wallTop" type="number" step="5" /></label>
+        </div>
+        <div id="wallSeg" style="display:none">
+          <div id="segList"></div>
+          <div class="hintText">画布左缘标尺可直接拖分界线；斜纹带 = 过渡带（边界 ±50 内墙角是混合值，别把关键点摆在里面）。</div>
+        </div>
+
+        <h3>岩点工具</h3>
+        <label>放置类型 <select id="holdType" style="flex:1;min-width:0"></select></label>
+        <label>网格吸附 <select id="snapStep">
+          <option value="0">关</option>
+          <option value="5">5</option>
+          <option value="10">10</option>
+          <option value="20">20</option>
+        </select></label>
+        <label>伸展圈叠加 <input id="showReach" type="checkbox" /></label>
+
+        <div id="sel" style="display:none">
+          <h3>选中 <span id="selId"></span></h3>
+          <label>类型 <select id="hType" style="flex:1;min-width:0"></select></label>
+          <label>颜色 <input id="hColor" type="color" /><button id="hColorClear" class="ghost" style="flex:none">⟲ 类型默认</button></label>
+          <div id="swatches"></div>
+          <label>半径 <input id="hRadius" type="range" min="6" max="50" step="1" /><span class="val" id="hRadiusV"></span></label>
+          <label>朝向° <input id="hDir" type="range" min="-180" max="180" step="5" /><span class="val" id="hDirV"></span></label>
+          <div class="hintText" id="moveHint"></div>
+          <label>受力锥± <input id="hTol" type="range" min="5" max="120" step="1" /><span class="val" id="hTolV"></span></label>
+          <label>材质 <select id="hMat">
+            <option value="normal">普通</option>
+            <option value="grippy">磨砂</option>
+            <option value="slick">光滑</option>
+          </select></label>
+          <label>所属体积块 <select id="hVol"><option value="">无</option></select></label>
+          <label>起始肢 <select id="hStart">
+            <option value="">无</option><option>LH</option><option>RH</option><option>LF</option><option>RF</option>
+          </select></label>
+          <label>终点 <input id="hGoal" type="checkbox" /></label>
+          <button id="delHold">🗑 删除选中 (Del)</button>
+        </div>
+        <button id="mirrorAll" class="ghost">⇄ 整关水平镜像</button>
+
+        <h3>校验</h3>
+        <div id="issues"></div>
 
         <h3>操作</h3>
         <div class="row">
@@ -55,12 +148,30 @@
           <button id="solve">🧠 求解定标</button>
         </div>
         <div id="solveOut">（求解结果显示在这里）</div>
+
+        <h3>保存</h3>
         <div class="row">
-          <button id="export" class="ghost">📤 导出 JSON</button>
-          <button id="import" class="ghost">📥 导入</button>
+          <button id="dlJson" class="ghost">💾 下载 .json</button>
+          <button id="upJson" class="ghost">📂 导入 .json</button>
         </div>
-        <textarea id="io" placeholder="LevelDef JSON"></textarea>
-        <div style="opacity:.6">编辑：点空白放点 · 拖点移动 · Del 删除<br/>试玩：正常游戏操作，Esc 回编辑</div>
+        <input id="fileJson" type="file" accept=".json,application/json" style="display:none" />
+        <div class="row">
+          <button id="genTs" class="ghost">📜 生成关卡 TS</button>
+          <button id="copyIo" class="ghost">📋 复制</button>
+        </div>
+        <textarea id="io" placeholder="导出/生成结果，也可粘贴 LevelDef JSON 后点「导入文本」"></textarea>
+        <div class="row">
+          <button id="exportText" class="ghost">📤 导出到文本框</button>
+          <button id="importText" class="ghost">📥 导入文本</button>
+        </div>
+
+        <h3>快捷键</h3>
+        <div class="hintText">
+          点空白放点 · 拖点移动 · 框选多点 · Ctrl+点 加选<br />
+          Del 删除 · Ctrl+C/V 复制粘贴 · Ctrl+Z/Y 撤销重做<br />
+          滚轮缩放 · 空格/中键拖 平移 · F 框全 · G 切吸附<br />
+          Esc 试玩退回编辑
+        </div>
       </div>
     </div>
     <script type="module" src="/src/editor.ts"></script>

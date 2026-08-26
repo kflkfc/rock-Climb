@@ -25,8 +25,15 @@ import {
   maxReachOf,
   Pose,
 } from "../model/skeleton.ts";
-import { Hold, makeHold, holdUsableBy } from "./holds.ts";
-import { GripOption, GripMethod, gripOptions, gripsFor, matchPercent } from "./grip.ts";
+import { Hold, makeHold, holdUsableBy, isPocket, MoveType } from "./holds.ts";
+import {
+  GripOption,
+  GripMethod,
+  gripOptions,
+  gripsFor,
+  matchPercent,
+  classifyMove,
+} from "./grip.ts";
 import {
   Climber,
   LimbState,
@@ -43,7 +50,7 @@ import { LEVELS } from "../level/levels.ts";
 import { StarResult, judgeStars, starCount } from "../progress/stars.ts";
 import { dynoUnlocked } from "../progress/techTree.ts";
 import { tuning } from "../config/tuning.ts";
-import { datan2 } from "../math/dmath.ts";
+import { datan2, dcos, dsin } from "../math/dmath.ts";
 
 export type Status = "climbing" | "ring" | "won" | "fallen";
 
@@ -54,6 +61,8 @@ export interface RingState {
   /** 接触点相对岩点中心的偏移（不吸附：选定抓法后肢端留在原处） */
   contactOff: Vec2;
   pullRad: number;
+  /** 这一手在做什么动作（正拉/侧拉/反提/反肩）——由朝向×身体位置派生，供 UI 标注 */
+  move: MoveType;
   options: GripOption[];
 }
 
@@ -189,6 +198,7 @@ export class Game {
         pullDir: h.pullDirDeg != null ? (h.pullDirDeg * Math.PI) / 180 : undefined,
         pullTol: h.pullTolDeg != null ? (h.pullTolDeg * Math.PI) / 180 : undefined,
         material: h.material,
+        color: h.color,
         onVolume: h.onVolume,
         isGoal: h.goal,
         startLimb: h.start,
@@ -233,6 +243,7 @@ export class Game {
         contactOff: v(0, 0),
         stamina: 1,
         align: 1,
+        move: "downpull",
         freePos: { ...h.pos },
         slipping: false,
       };
@@ -378,7 +389,7 @@ export class Game {
     const contactOff = sub(this.dragPos, hold.pos);
     const contactDist = len(contactOff);
     // 肢端占位（V1.1）：与任何已抓肢端重叠 > 上限 → 后来者抓不住，保持自由
-    if (this.overlapBlocked(l, this.dragPos)) {
+    if (this.overlapBlocked(l, this.dragPos, hold)) {
       this.lastBlocked = { limb: l, t: this.time };
       return;
     }
@@ -402,6 +413,7 @@ export class Game {
       contactDist,
       contactOff,
       pullRad,
+      move: this.moveAt(hold, l),
       options: gripOptions(l, hold, contactDist, pullRad, this.climberLevel),
     };
     this.status = "ring";
@@ -489,7 +501,7 @@ export class Game {
       const contactOff = scale(norm(sub(root, hold.pos)), contactDist);
       const cpos = add(hold.pos, contactOff);
       // 占位：落点与已抓肢端重叠过多 → 这只手拍不住，换另一只手试
-      if (this.overlapBlocked(l, cpos)) continue;
+      if (this.overlapBlocked(l, cpos, hold)) continue;
       this.c.limbs[l].freePos = { ...cpos };
       const pullRad = datan2(root.y - hold.pos.y, root.x - hold.pos.x);
       const match = matchPercent({ hold, grip: "slap", distToCenter: contactDist, pullRad });
@@ -582,7 +594,25 @@ export class Game {
   }
 
   /** 肢端占位判定（V1.1）：pos 处放置肢端 l，与任何已抓肢端重叠比例是否超上限 */
-  private overlapBlocked(l: Limb, pos: Vec2): boolean {
+  /** 该肢端在此岩点上会构成什么动作（与 stepClimber 同一判据，供抓法环标注） */
+  private moveAt(hold: Hold, l: Limb): MoveType {
+    if (!isHand(l)) return "downpull";
+    const com = this.c.pose.com;
+    const wallDown = datan2(dcos(this.c.lean), -dsin(this.c.lean));
+    const towardBody = dcos(hold.pullDir) * (com.x - hold.pos.x) >= 0;
+    return classifyMove(hold.pullDir, wallDown, towardBody);
+  }
+
+  private overlapBlocked(l: Limb, pos: Vec2, hold?: Hold | null): boolean {
+    // 指洞独占：洞就那么大，一只手的手指进去就满了，第二只肢端再贴边也塞不下。
+    // （只靠 30% 重叠规则拦不住——半径 14 的大指洞两手各贴一边其实错得开。）
+    if (hold && isPocket(hold.type)) {
+      for (const m of LIMBS) {
+        if (m === l) continue;
+        const ms = this.c.limbs[m];
+        if (ms.attached && ms.hold?.id === hold.id) return true;
+      }
+    }
     const rl = limbRadiusOf(l, tuning);
     for (const m of LIMBS) {
       if (m === l) continue;
@@ -598,7 +628,7 @@ export class Game {
     let best: Hold | null = null;
     let bestD = Infinity;
     for (const h of this.holds) {
-      if (!holdUsableBy(h, l)) continue; // 脚钉仅脚 / 指洞捏点等仅手
+      if (!holdUsableBy(h, l)) continue; // 手抓不住脚钉；脚则哪儿都能踩
       const d = dist(p, h.pos);
       if (d < h.radius * TOUCH_SLACK && d < bestD) {
         bestD = d;
